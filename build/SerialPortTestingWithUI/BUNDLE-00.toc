@@ -1,0 +1,3 @@
+([('SerialPortTestingWithUI',
+   '/Users/tingyuanzhu/PycharmProjects/Tool/dist/SerialPortTestingWithUI',
+   'EXECUTABLE')],)
