@@ -47,7 +47,6 @@ print(hex_response)
 
 ser.close()
 
-
 def is_handshake_ok(data: bytes) -> str:
     if handshake_ok_bytes in data:
         response = "✅ Success"
