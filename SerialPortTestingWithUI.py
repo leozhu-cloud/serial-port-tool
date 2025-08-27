@@ -5,6 +5,8 @@ import serial.tools.list_ports
 import binascii
 import time
 
+APP_VERSION = "1.1"
+
 hex_send_data_hex = '020006FFFFFFFF00010304'
 hex_send_wrong_data_hex = '8240d0ffff40d058f8'
 # 🔹 发送内容选项
@@ -38,11 +40,30 @@ def is_handshake_ok(data: bytes) -> str:
         return "❌ Failed"
 
 def parse_sn(data: bytes) -> str:
-    idx = data.find(b'\x69\x01')
+    """
+    先将 bytes 转 HEX 字符串，再按照 TLV 解析 SN
+    TLV 格式: 69 01 [长度 2字节] [SN数据]
+    """
+    data_hex = data.hex().upper()  # bytes -> HEX
+    # TLV 头部
+    head = "6901"
+    idx = data_hex.find(head)
     if idx == -1:
         return None
-    sn = data[idx+4:idx+4+13]
-    return sn.decode('ascii')
+
+    # 长度字段 1字节或2字节？原 bytes 用 idx+2:idx+4 两字节
+    length_hex = data_hex[idx + 4: idx + 8]  # 两字节长度 HEX
+    length = int(length_hex, 16)
+
+    # SN 数据段，每字节对应 2 个 HEX 字符
+    sn_hex = data_hex[idx + 8: idx + 8 + length]
+
+    if len(sn_hex) < length:
+        return None
+
+    # 转回 ASCII
+    sn_bytes = bytes.fromhex(sn_hex)
+    return sn_bytes.decode('ascii')
 
 def do_handshake():
     port_name = port_var.get()
@@ -83,6 +104,10 @@ def do_handshake():
 # --- GUI ---
 root = tk.Tk()
 root.title("TargetPOS Serial Port Testing")
+
+version_label = tk.Label(root, text=f"Version {APP_VERSION}", anchor="e")
+version_label.pack(side=tk.BOTTOM, fill=tk.X, padx=5, pady=2)
+
 root.geometry("650x400")
 
 # --- GUI ---
