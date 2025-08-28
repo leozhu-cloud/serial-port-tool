@@ -1,0 +1,111 @@
+# =========================
+# 常量管理
+# =========================
+from doctest import FAIL_FAST
+
+# 串口相关
+SERIAL_READ_SIZE = 1024
+SERIAL_TIMEOUT = 3
+
+# command and respond of handshake are fixed
+HANDSHAKE_CMD = '020006FFFFFFFF00010304'
+HANDSHAKE_OK_RESP = '020008FFFFFFFF80013030038A'
+HANDSHAKE_RETRY_RESP = '020008FFFFFFFF800330300388'
+
+"""
+Lower Layer TLV Message: HEAD + LENGTH + PAYLOAD + END + CHECKSUM
+PAYLOAD: MARK + COMMAND + PACKET
+PACKET is Higher Layer Message
+"""
+# 下层包 Head 定义
+START = '02'
+PAYLOAD_MARK = 'FFFFFFFF'
+END = '03'
+# 下层包 command/cmd 定义
+CMD_ESTABLISH_CONN = '0001'
+CMD_CONN_answer = '8001'
+CMD_PROC_ENDS = '8002'
+CMD_RETRY = '8003'
+CMD_DUKPT_INTERACTION =  '8010'
+CMD_KEK_INTERACTION = '8011'
+CMD_EFT_INTERACTION ='8013'
+CMD_TMK_INTERACTION = '8014'
+CMD_KBPK_INTERACTION = '8015'
+
+"""
+Higher Layer TLV Message: TYPE + LENGTH + DATA
+"""
+# Tag 定义
+TYPE_KSN = '6900'
+TYPE_SN = '6901'
+TYPE_RSA_PUBLIC_KEY = '6902'
+
+TYPE_DUKPT_CIPHER = '6903'
+TYPE_DUKPT_KCV_CIPHER = '6904'
+TYPE_KEK_PLAIN = '6905'
+TYPE_KEK_KCV = '6906'
+TYPE_DUKPT_KSN = '6907'
+TYPE_DUKPT_IDX = '6908'
+TYPE_DUKPT_3DES_AES = '6910'
+
+TYPE_KEY_LENGTH = '6911'
+
+TYPE_EFT_KEY = '6909'
+TYPE_EFT_KCV = '690A'
+TYPE_EFT_IDX = '690B'
+
+TYPE_TMK_CIPHER = '6F01'
+TYPE_TMK_KCV = '6F02'
+TYPE_TMK_IDX = '6F03'
+
+TYPE_KBPK_KEY_DATA = '6F04'
+TYPE_KBPK_KCV = '6F05'
+TYPE_KBPK_IDX = '6F06'
+
+# Tag
+TYPE_SUBSEQ_DATA = '6F00'
+# Value
+NO_SUBSEQ = '00'
+YES_SUBSEQ = '01'
+
+
+# kek information
+KEK_TSYS = '679BF40E8C1329FD380E83D3A7C157D5'
+
+# bdk information
+BDK_PLAIN = '0123456789ABCDEFFEDCBA9876543210'
+# BDK_cypher = '2E51D99703F78E38E2C04C645C884BB3'
+# BDK_kcv_plaintext = '08D7B4FB629D0885'
+# BDK_kcv_cypher = '50D2D8ABE11C67EB'
+BDK_KSN = 'FFFF5B467C7DC5E00001'
+BDK_IDX = '06'
+
+
+
+# Error Message
+ERR_PARSE_RSA = '[ERROR] Parse RSA Public Key Failure'
+ERR_PARSE_SN = '[ERROR] Parse SN Failure'
+ERR_PARSE_KSN = '[ERROR] Parse the Initial KSN Failure'
+ERR_RSA_KEY_LOAD = '[ERROR] RSA Public Key Loading Failure'
+ERR_RSA_ENC = '[ERROR] RSA Encryption Failure'
+ERR_BDK_LENGTH = '[ERROR] BDK must be 16 or 24 bytes (32 or 48 characters in hex length). / BDK 必须是 16 或 24 字节 (hex 长度 32 或 48)。'
+ERR_KSN_LENGTH = '[ERROR] KSN must be 10 bytes (20 characters in hex length). / KSN 必须是 10 字节 (hex 长度 20)。'
+
+# Respond Message
+RESP = 'Response'
+SUCCESS_RESP = 'Success'
+FAILURE_RESP = 'Failed'
+RETRY_RESP = 'Retry'
+
+# For Log
+INFO_HANDSHAKE_CMD_BYTES = 'Handshake Command (bytes)'
+INFO_SN_RESP = 'SN'
+INFO_RSA_PUBLIC_KEY = 'RSA Public Key'
+INFO_INIT_KSN_RESP = 'Initial KSN'
+
+INFO_KEK_HIGHER_PACKET = 'KEK Higher Layer Packet'
+INFO_KEK_FULL_LOWER_MESSAGE = 'KEK Full Lower Layer Message'
+
+INFO_IPEK_PLAIN = 'IPEK Plaintext'
+INFO_DUKPT_HIGHER_PACKET = 'DUKPT Higher Layer Packet'
+INFO_DUKPT_FULL_LOWER_MESSAGE = 'DUKPT Full Lower Layer Message'

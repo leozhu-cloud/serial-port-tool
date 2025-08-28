@@ -1,3 +1,5 @@
+import constants
+
 import sys
 import logging
 import time
@@ -14,44 +16,6 @@ from Crypto.Cipher import DES3
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-start = '02'
-payload_mark = 'FFFFFFFF'
-end = '03'
-
-establish_connection = '0001'
-connection_answer = '8001'
-process_ends = '8002'
-retry = '8003'
-dukpt_interaction =  '8010'
-kek_interaction = '8011'
-eft_interaction ='8013'
-tmk_interaction = '8014'
-kbpk_interaction = '8015'
-
-type_ksn = '6900'
-type_sn = '6901'
-type_rsa_public_key = '6902'
-type_dukpt_ciphertext_data = '6903'
-type_dukpt_ciphertext_kcv = '6904'
-type_kek_plaintext_data = '6905'
-type_kek_kcv = '6906'
-type_dukpt_ksn = '6907'
-type_dukpt_index = '6908'
-type_dukpt_3des_aes = '6910'
-type_key_length = '6911'
-etf_key = '6909'
-eft_kcv = '690A'
-eft_index = '690B'
-
-tmk_ciphertext = '6F01'
-tmk_kcv = '6F02'
-tmk_index = '6F03'
-
-kbpk_key_data = '6F04'
-kbpk_kcv = '6F05'
-kbpk_index = '6F06'
-type_subsequent_data = '6F00'
-
 # make sure we have the Lib
 print(serial.__file__)
 print(hasattr(serial, "Serial"))
@@ -65,27 +29,16 @@ for port in ports:
 
 port_name = input("Enter Device name: ")
 
-handshake_ok_bytes = bytes.fromhex('020008FFFFFFFF80013030038A')
-handshake_retry_bytes = bytes.fromhex('020008FFFFFFFF800330300388')
+handshake_ok_bytes = bytes.fromhex(constants.HANDSHAKE_OK_RESP)
+handshake_retry_bytes = bytes.fromhex(constants.HANDSHAKE_RETRY_RESP)
 
-send_handshake_data_hex = "020006FFFFFFFF00010304"
-# Convert to Bytes
-data_bytes = bytes.fromhex(send_handshake_data_hex)
+
+# Convert HEX of handshake command to Bytes
+handshake_data_bytes = bytes.fromhex(constants.HANDSHAKE_CMD)
+print(f"send {constants.INFO_HANDSHAKE_CMD_BYTES}: {handshake_data_bytes}")
 
 # VARIANT_MASK 是固定的，标准定义，在ANSI X9.24 规范里写死的，处理 IPEK 的时候使用
 VARIANT_MASK = bytes.fromhex('C0C0C0C000000000C0C0C0C000000000')
-
-# kek information
-kek_tsys = '679BF40E8C1329FD380E83D3A7C157D5'
-# kek_kcv_tsys = 'B5D6451B9BE94349'
-
-bdk_plaintext = '0123456789ABCDEFFEDCBA9876543210'
-# bdk_cypher = '2E51D99703F78E38E2C04C645C884BB3'
-# bkd_kcv_plaintext = '08D7B4FB629D0885'
-# bkd_kcv_cypher = '50D2D8ABE11C67EB'
-bdk_ksn = 'FFFF5B467C7DC5E00001'
-bdk_index = '06'
-non_subsequent_data = '00'
 
 
 # Serial Port Configuration
@@ -96,7 +49,7 @@ try:
         bytesize=serial.EIGHTBITS,
         parity=serial.PARITY_NONE,
         stopbits=serial.STOPBITS_ONE,
-        timeout=3
+        timeout=constants.SERIAL_TIMEOUT,
     )
 except serial.SerialException as e:
     logger.error(f"串口打开失败: {e}")
@@ -107,22 +60,31 @@ except serial.SerialException as e:
 time.sleep(2)
 
 # send handshake (bytes) to TargetPOS
-ser.write(data_bytes)
-print(f"send: {data_bytes}")
+ser.write(handshake_data_bytes)
 
-response_bytes = b""
-while True:
-    chunk = ser.read(1024)  # 每次最多读 1KB
-    if not chunk:
-        break  # 超时，说明读完了
-    response_bytes += chunk
-print(f"response: {response_bytes}")
-print(f"完整数据: {response_bytes.hex().upper()}")
 
-# 接收来自 TargetPOS 的回显
-# response_bytes = ser.readline()
-# print(f'response: {response_bytes}')
+def read_full_response(ser, chunk_size: int = constants.SERIAL_READ_SIZE, timeout_sec: float = constants.SERIAL_TIMEOUT) -> bytes:
+    """
+    从串口读取完整响应
+    :param ser: Serial 对象
+    :param chunk_size: 每次读取的字节数
+    :param timeout_sec: 超时时间（秒），如果在 timeout_sec 内没有数据就停止
+    :return: 接收到的完整字节流
+    """
+    response_bytes = b""
+    start_time = time.time()
 
+    while True:
+        chunk = ser.read(chunk_size)
+        if chunk:
+            response_bytes += chunk
+            start_time = time.time()  # 收到数据，重置超时计时
+        else:
+            # 如果超时就退出
+            if time.time() - start_time >= timeout_sec:
+                break
+
+    return response_bytes
 
 def read_full_frame(ser):
     buffer = bytearray()
@@ -151,6 +113,20 @@ def read_full_frame(ser):
                 return frame
 
 
+response_bytes = read_full_response(ser)
+# response_bytes = b""
+# while True:
+#     chunk = ser.read(constants.SERIAL_READ_SIZE)  # 每次最多读 1KB
+#     if not chunk:
+#         break  # 超时，说明读完了
+#     response_bytes += chunk
+# print(f"response: {response_bytes}")
+# print(f"完整数据: {response_bytes.hex().upper()}")
+#
+# 接收来自 TargetPOS 的回显
+# response_bytes = ser.readline()
+# print(f'response: {response_bytes}')
+
 # 校验 checksum
 def verify_checksum(frame):
     # frame = STX + LEN_H + LEN_L + PAYLOAD + ETX + CHECKSUM
@@ -162,11 +138,11 @@ def verify_checksum(frame):
 
 def is_handshake_ok(data: bytes) -> str:
     if handshake_ok_bytes in data:
-        response = "✅ Success"
+        response = f"✅ {constants.SUCCESS_RESP}"
     elif handshake_retry_bytes in data:
-        response = "❌ Retry"
+        response = f"❌ {constants.RETRY_RESP}"
     else:
-        response ="❌ Failed"
+        response = f"❌ {constants.FAILURE_RESP}"
     return response
 
 def parse_sn(data: bytes) -> str | None:
@@ -177,7 +153,7 @@ def parse_sn(data: bytes) -> str | None:
     try:
         data_hex = data.hex().upper()  # bytes -> HEX
         # TLV 头部
-        head = type_sn
+        head = constants.TYPE_SN
         idx = data_hex.find(head)
         if idx == -1:
             return None
@@ -199,10 +175,10 @@ def parse_sn(data: bytes) -> str | None:
         return sn_bytes.decode('ascii')
 
     except Exception as e:
-        print(f"[ERROR] parse_sn failure: {e}")
+        logger.error(f"{constants.ERR_PARSE_SN}: {e}")
         return None
 
-def parse_rsa_public(data: bytes) -> hex | None:
+def parse_rsa_public(data: bytes) -> hex:
     """
     先把 bytes 转 HEX 字符串，再在 HEX 字符串里按 TLV 解析 RSA 公钥
     TLV 格式: 69 02 [长度 2字节] [payload]
@@ -212,7 +188,7 @@ def parse_rsa_public(data: bytes) -> hex | None:
         hex_data = data.hex().upper()
         print(f"Full HEX: {hex_data}")
         # TLV 中，头是 "6902"
-        head = type_rsa_public_key
+        head = constants.TYPE_RSA_PUBLIC_KEY
         idx = hex_data.find(head)
         if idx == -1:
             return None
@@ -233,11 +209,11 @@ def parse_rsa_public(data: bytes) -> hex | None:
         return payload_hex
 
     except Exception as e:
-        print(f"[ERROR] parse_rsa_public failure: {e}")
+        logger.error(f"{constants.ERR_PARSE_RSA}: {e}")
         return None
 
 
-print(f"Handshake: {is_handshake_ok(response_bytes)}")
+logger.info(f"Handshake: {is_handshake_ok(response_bytes)}")
 
 def rsa_encrypt_hex(pubkey_der_hex: hex, plaintext_hex: hex) -> hex:
     """
@@ -264,7 +240,7 @@ def rsa_encrypt_hex(pubkey_der_hex: hex, plaintext_hex: hex) -> hex:
     try:
         public_key = serialization.load_der_public_key(pubkey_bytes)
     except ValueError as e:
-        print(f"[ERROR] 公钥加载失败: {e}")
+        logger.error(f":{constants.ERR_RSA_KEY_LOAD}: {e}")
         return None
 
     # 加密
@@ -274,7 +250,7 @@ def rsa_encrypt_hex(pubkey_der_hex: hex, plaintext_hex: hex) -> hex:
             padding.PKCS1v15()
         )
     except Exception as e:
-        print(f"[ERROR] RSA 加密失败: {e}")
+        logger.error(f"{constants.ERR_RSA_ENC}: {e}")
         return None
 
 
@@ -284,12 +260,12 @@ def rsa_encrypt_hex(pubkey_der_hex: hex, plaintext_hex: hex) -> hex:
 try:
     sn = parse_sn(response_bytes)
 except Exception as e:
-    print(f"[ERROR] 解析 SN 失败: {e}")
+    logger.error(f"{constants.ERR_PARSE_SN}: {e}")
     sn = None
-print(f"sn: {sn}")
+logger.info(f"{constants.INFO_SN_RESP}: {sn}")
 
 rsa_public_key_hex = parse_rsa_public(response_bytes)
-print(f"RSA Public Key: {rsa_public_key_hex}")
+logger.info(f"{constants.INFO_RSA_PUBLIC_KEY}: {rsa_public_key_hex}")
 
 def calc_checksum(frame_hex: str) -> int:
     frame = bytes.fromhex(frame_hex)
@@ -338,7 +314,7 @@ def build_lower_layer_packet(packet_hex: hex, command_hex: hex) -> hex:
 
     # 转为 bytes
     head = b'\x02'
-    mark_bytes = bytes.fromhex(payload_mark)
+    mark_bytes = bytes.fromhex(constants.PAYLOAD_MARK)
     command_bytes = bytes.fromhex(command_hex)
     payload_bytes = bytes.fromhex(packet_hex)  # 上层包作为Packet
     end = b'\x03'
@@ -367,7 +343,7 @@ def parse_initial_ksn(data: bytes) -> str | None:
     try:
         data_hex = data.hex().upper()  # bytes -> HEX
         # TLV 头部
-        head = type_ksn
+        head = constants.TYPE_KSN
         idx = data_hex.find(head)
         if idx == -1:
             return None
@@ -388,25 +364,25 @@ def parse_initial_ksn(data: bytes) -> str | None:
         return ksn_hex
 
     except Exception as e:
-        print(f"[ERROR] parse_initial_ksn failure: {e}")
+        logger.error(f"{constants.ERR_PARSE_KSN}: {e}")
         return None
 
 def derive_ipek_from_bdk(bdk_hex: str, initial_ksn_hex: str) -> str:
     """
     输入:
-      bdk_hex: 16字节 BDK 的十六进制字符串 (例如 '0123...3210')
-      ksn_hex: 10字节 KSN 的十六进制字符串 (例如 'FFFF9876543210E00008')
+      bdk_hex: 16 bytes BDK 的十六进制字符串 (such as '0123...3210')
+      ksn_hex: 10 bytes KSN 的十六进制字符串 (such as 'FFFF9876543210E00008')
     输出:
       32字节 IPEK 的十六进制字符串
     """
 
     bdk = binascii.unhexlify(bdk_hex)
     if len(bdk) not in (16, 24):
-        raise ValueError("BDK 必须是 16 或 24 字节 (hex 长度 32 或 48)。")
+        raise ValueError(f"{constants.ERR_BDK_LENGTH}")
 
     ksn = bytearray(binascii.unhexlify(initial_ksn_hex))
     if len(ksn) != 10:
-        raise ValueError("KSN 必须是 10 字节 (hex 长度 20)。")
+        raise ValueError(f"{constants.ERR_KSN_LENGTH}")
 
     # 清零 KSN 低 21 位（DUKPT 规范）
     ksn_masked = ksn[:]
@@ -471,65 +447,60 @@ def calculate_kcv(key_hex: str) -> str:
     return kcv
 
 
-kek_kcv = calculate_kcv(kek_tsys)
+kek_kcv = calculate_kcv(constants.KEK_TSYS)
 # KEK Injection
-kek_plaintext_data_packet = build_upper_layer_packet(type_kek_plaintext_data, kek_tsys)
-kek_plaintext_kcv_packet = build_upper_layer_packet(type_kek_kcv, kek_kcv)
+kek_plaintext_data_packet = build_upper_layer_packet(constants.TYPE_KEK_PLAIN, constants.KEK_TSYS)
+kek_plaintext_kcv_packet = build_upper_layer_packet(constants.TYPE_KEK_KCV, kek_kcv)
 kek_plaintext_full_packet = kek_plaintext_data_packet + kek_plaintext_kcv_packet
-print(f"full_plaintext_kek_data: {kek_plaintext_full_packet}")
+logger.info(f"full_plaintext_kek_data: {kek_plaintext_full_packet}")
 
 kek_rsa_encrypt_full_packet = rsa_encrypt_hex(rsa_public_key_hex, kek_plaintext_full_packet)
-print(f"kek_rsa_encrypt_full_packet: {kek_rsa_encrypt_full_packet}")
+logger.info(f"kek_rsa_encrypt_full_packet: {kek_rsa_encrypt_full_packet}")
 
-kek_process_full_package = build_lower_layer_packet(kek_rsa_encrypt_full_packet, kek_interaction)
+kek_lower_layer_full_message = build_lower_layer_packet(kek_rsa_encrypt_full_packet, constants.CMD_KEK_INTERACTION)
 # send KEK response (bytes) to TargetPOS
-ser.write(bytes.fromhex(kek_process_full_package))
-print(f"send: {kek_process_full_package}")
+ser.write(bytes.fromhex(kek_lower_layer_full_message))
+logger.info(f"Send {constants.INFO_KEK_FULL_LOWER_MESSAGE}: {kek_lower_layer_full_message}")
 
-response_bytes = b""
-while True:
-    chunk = ser.read(1024)  # 每次最多读 1KB
-    if not chunk:
-        break  # 超时，说明读完了
-    response_bytes += chunk
+response_bytes = read_full_response(ser)
+logger.info(f"{constants.RESP}: {response_bytes.hex().upper()}")
 
-print(f"kek_完整数据: {response_bytes.hex().upper()}")
 initial_ksn = parse_initial_ksn(response_bytes)
-print(f"initial_ksn: {initial_ksn}")
-# response_bytes = ser.readline()
-# print(f'response: {response_bytes}')
+logger.info(f"{constants.INFO_INIT_KSN_RESP}: {initial_ksn}")
 
 
 # calculate IPEK
-ipek_plaintext = derive_ipek_from_bdk(bdk_plaintext, initial_ksn)
+ipek_plaintext = derive_ipek_from_bdk(constants.BDK_PLAIN, initial_ksn)
+logger.info(f"{constants.INFO_IPEK_PLAIN}: {ipek_plaintext}")
+
 ipek_kcv_plaintext = calculate_kcv(ipek_plaintext)
-ipek_cipher = key_encryption_from_kek(ipek_plaintext, kek_tsys)
-ipek_kcv_cipher = key_encryption_from_kek(ipek_kcv_plaintext, kek_tsys)
+ipek_cipher = key_encryption_from_kek(ipek_plaintext, constants.KEK_TSYS)
+ipek_kcv_cipher = key_encryption_from_kek(ipek_kcv_plaintext, constants.KEK_TSYS)
 # DUKPT injection
-dukpt_key_type_packet = build_upper_layer_packet(type_key_length, '313238')
-dukpt_key_length_packet = build_upper_layer_packet(type_dukpt_3des_aes, '31')
-dukpt_cipher_data_packet = build_upper_layer_packet(type_dukpt_ciphertext_data, ipek_cipher)
-dukpt_cipher_kcv_packet = build_upper_layer_packet(type_dukpt_ciphertext_kcv, ipek_kcv_cipher)
-dukpt_ksn_packet = build_upper_layer_packet(type_dukpt_ksn, bdk_ksn)
-bdk_index_packet = build_upper_layer_packet(type_dukpt_index, bdk_index)
-subsequent_data = build_upper_layer_packet(type_subsequent_data, non_subsequent_data)
+dukpt_key_type_packet = build_upper_layer_packet(constants.TYPE_KEY_LENGTH, '313238')
+dukpt_key_length_packet = build_upper_layer_packet(constants.TYPE_DUKPT_3DES_AES, '31')
+dukpt_cipher_data_packet = build_upper_layer_packet(constants.TYPE_DUKPT_CIPHER, ipek_cipher)
+dukpt_cipher_kcv_packet = build_upper_layer_packet(constants.TYPE_DUKPT_KCV_CIPHER, ipek_kcv_cipher)
+dukpt_ksn_packet = build_upper_layer_packet(constants.TYPE_DUKPT_KSN, constants.BDK_KSN)
+bdk_index_packet = build_upper_layer_packet(constants.TYPE_DUKPT_IDX, constants.BDK_IDX)
+subsequent_data = build_upper_layer_packet(constants.TYPE_SUBSEQ_DATA, constants.NO_SUBSEQ)
+
+# Build higher layer packet for dukpt with plaintext
 dukpt_full_packet = dukpt_key_type_packet + dukpt_key_length_packet + dukpt_cipher_data_packet + dukpt_cipher_kcv_packet + dukpt_ksn_packet + bdk_index_packet + subsequent_data
-print(f"dukpt_full_packet : {dukpt_full_packet}")
+logger.info(f"{constants.INFO_DUKPT_HIGHER_PACKET} : {dukpt_full_packet}")
+
+#Encrypted dukpt packet with RSA public key
 dukpt_rsa_encrypt_full_packet = rsa_encrypt_hex(rsa_public_key_hex, dukpt_full_packet)
 
-dukpt_process_full_package = build_lower_layer_packet(dukpt_rsa_encrypt_full_packet, dukpt_interaction)
+dukpt_low_layer_full_package = build_lower_layer_packet(dukpt_rsa_encrypt_full_packet, constants.CMD_DUKPT_INTERACTION)
+logger.info(f"Send {constants.INFO_DUKPT_FULL_LOWER_MESSAGE}: {dukpt_low_layer_full_package}")
+
 # send IPEK response (bytes) to TargetPOS
-ser.write(bytes.fromhex(dukpt_process_full_package))
-print(f"send: {dukpt_process_full_package}")
+ser.write(bytes.fromhex(dukpt_low_layer_full_package))
 
-response_bytes = b""
-while True:
-    chunk = ser.read(1024)  # 每次最多读 1KB
-    if not chunk:
-        break  # 超时，说明读完了
-    response_bytes += chunk
+response_bytes = read_full_response(ser)
+logger.info(f"{constants.RESP}: {response_bytes.hex().upper()}")
 
-print(f"dukpt_完整数据: {response_bytes.hex().upper()}")
 
 # close serial port
 ser.close()
