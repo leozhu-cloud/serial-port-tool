@@ -400,7 +400,6 @@ def derive_ipek_from_bdk(bdk_hex: str, initial_ksn_hex: str) -> str:
       32字节 IPEK 的十六进制字符串
     """
 
-
     bdk = binascii.unhexlify(bdk_hex)
     if len(bdk) not in (16, 24):
         raise ValueError("BDK 必须是 16 或 24 字节 (hex 长度 32 或 48)。")
@@ -531,7 +530,6 @@ while True:
     response_bytes += chunk
 
 print(f"dukpt_完整数据: {response_bytes.hex().upper()}")
-
 
 # close serial port
 ser.close()
