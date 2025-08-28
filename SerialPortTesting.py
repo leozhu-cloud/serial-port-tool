@@ -6,6 +6,9 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives import hashes
 
+from binascii import unhexlify, hexlify
+from Crypto.Cipher import DES3
+
 start = '02'
 payload_mark = 'FFFFFFFF'
 end = '03'
@@ -44,6 +47,9 @@ kbpk_kcv = '6F05'
 kbpk_index = '6F06'
 type_subsequent_data = '6F00'
 
+# VARIANT_MASK 是固定的，标准定义，在ANSI X9.24 规范里写死的，处理 IPEK 的时候使用
+VARIANT_MASK = bytes.fromhex('C0C0C0C000000000C0C0C0C000000000')
+
 # make sure we have the Lib
 print(serial.__file__)
 print(hasattr(serial, "Serial"))
@@ -65,13 +71,12 @@ send_handshake_data_hex = "020006FFFFFFFF00010304"
 data_bytes = bytes.fromhex(send_handshake_data_hex)
 # kek information
 kek_tsys = '679BF40E8C1329FD380E83D3A7C157D5'
-kek_kcv_tsys = 'B5D6451B9BE94349'
-kek_packet_plaintext_hex = '69050020' + kek_tsys + '69060010' + kek_kcv_tsys
+# kek_kcv_tsys = 'B5D6451B9BE94349'
 
 bdk_plaintext = '0123456789ABCDEFFEDCBA9876543210'
-bkd_kcv_plaintext = '08D7B4FB629D0885'
-bdk_cypher = '2E51D99703F78E38E2C04C645C884BB3'
-bkd_kcv_cypher = '50D2D8ABE11C67EB'
+# bdk_cypher = '2E51D99703F78E38E2C04C645C884BB3'
+# bkd_kcv_plaintext = '08D7B4FB629D0885'
+# bkd_kcv_cypher = '50D2D8ABE11C67EB'
 bdk_ksn = 'FFFF5B467C7DC5E00001'
 bdk_index = '06'
 non_subsequent_data = '00'
@@ -353,15 +358,93 @@ def parse_initial_ksn(data: bytes) -> str:
     # 返回hex
     return ksn_hex
 
+def derive_ipek_from_bdk(bdk_hex: str, initial_ksn_hex: str) -> str:
+    """
+    输入:
+      bdk_hex: 16字节 BDK 的十六进制字符串 (例如 '0123...3210')
+      ksn_hex: 10字节 KSN 的十六进制字符串 (例如 'FFFF9876543210E00008')
+    输出:
+      32字节 IPEK 的十六进制字符串
+    """
 
 
+    bdk = binascii.unhexlify(bdk_hex)
+    if len(bdk) not in (16, 24):
+        raise ValueError("BDK 必须是 16 或 24 字节 (hex 长度 32 或 48)。")
 
+    ksn = bytearray(binascii.unhexlify(initial_ksn_hex))
+    if len(ksn) != 10:
+        raise ValueError("KSN 必须是 10 字节 (hex 长度 20)。")
+
+    # 清零 KSN 低 21 位（DUKPT 规范）
+    ksn_masked = ksn[:]
+    ksn_masked[9] = 0x00
+    ksn_masked[8] = 0x00
+    ksn_masked[7] &= 0xE0
+
+    # 取处理后的前 8 字节作为数据块
+    data_block = bytes(ksn_masked[:8])
+
+    # 3DES-ECB 加密函数（PyCryptodome 会处理 16 字节 2-key 3DES 为 K1|K2|K1）
+    def tdes_encrypt(key: bytes, block: bytes) -> bytes:
+        return DES3.new(key, DES3.MODE_ECB).encrypt(block)
+
+    # keyA = BDK
+    left = tdes_encrypt(bdk, data_block)
+
+    # keyB = BDK XOR VARIANT_MASK
+    key_variant = bytes(a ^ b for a, b in zip(bdk, VARIANT_MASK))
+    right = tdes_encrypt(key_variant, data_block)
+
+    ipek = left + right
+    return hexlify(ipek).upper().decode()
+
+def key_encryption_from_kek(key_hex: str, kek_hex: str) -> str:
+    key = unhexlify(key_hex)
+    kek = unhexlify(kek_hex)
+
+    # KEK must be 16 or 24 bytes
+    if len(kek) == 16:
+        kek = kek + kek[:8]  # 扩展成 K1-K2-K1 模式的 24字节
+    elif len(kek) != 24:
+        raise ValueError("KEK must be 16 or 24 bytes.")
+
+    if len(key) % 8 != 0:
+        raise ValueError("BDK must be a multiple of 8 bytes.")
+
+    cipher = DES3.new(kek, DES3.MODE_ECB)
+
+    encrypted = b''
+    for i in range(0, len(key), 8):
+        block = key[i:i + 8]
+        encrypted += cipher.encrypt(block)
+
+    return hexlify(encrypted).decode().upper()
+
+def calculate_kcv(key_hex: str) -> str:
+    key = unhexlify(key_hex)
+
+    # 补齐成三重 DES 密钥：K1-K2-K1
+    if len(key) == 16:
+        key += key[:8]  # 双长补成三段式 K1-K2-K1
+    elif len(key) != 24:
+        raise ValueError("Key must be either 16 or 24 bytes (32 or 48 hex characters)")
+
+    cipher = DES3.new(key, DES3.MODE_ECB)
+    zero_block = b'\x00' * 8
+    encrypted = cipher.encrypt(zero_block)
+
+    # KCV = 前 8 个字节（16 hex 字符）
+    kcv = hexlify(encrypted[:8]).decode().upper()
+    return kcv
+
+
+kek_kcv = calculate_kcv(kek_tsys)
 # KEK Injection
 kek_plaintext_data_packet = build_upper_layer_packet(type_kek_plaintext_data, kek_tsys)
-kek_plaintext_kcv_packet = build_upper_layer_packet(type_kek_kcv, kek_kcv_tsys)
+kek_plaintext_kcv_packet = build_upper_layer_packet(type_kek_kcv, kek_kcv)
 kek_plaintext_full_packet = kek_plaintext_data_packet + kek_plaintext_kcv_packet
 print(f"full_plaintext_kek_data: {kek_plaintext_full_packet}")
-print(f"kek_packet_plaintext_hex: {kek_packet_plaintext_hex}")
 
 kek_rsa_encrypt_full_packet = rsa_encrypt_hex(rsa_public_key_hex, kek_plaintext_full_packet)
 print(f"kek_rsa_encrypt_full_packet: {kek_rsa_encrypt_full_packet}")
@@ -385,19 +468,20 @@ print(f"initial_ksn: {initial_ksn}")
 # print(f'response: {response_bytes}')
 
 
-
-
-
-# BDK injection
-
-bdk_key_type_packet = build_upper_layer_packet(type_key_length, '313238')
-bdk_key_length_packet = build_upper_layer_packet(type_dukpt_3des_aes, '31')
-bdk_cipher_data_packet = build_upper_layer_packet(type_dukpt_ciphertext_data, bdk_cypher)
-bdk_cipher_kcv_packet = build_upper_layer_packet(type_dukpt_ciphertext_kcv, bkd_kcv_cypher)
-bdk_ksn_packet = build_upper_layer_packet(type_dukpt_ksn, bdk_ksn)
-bdk_index_packet = type_dukpt_index + '0002' + bdk_index
-bdk_subsequent_data = type_subsequent_data + '0002' + non_subsequent_data
-dukpt_full_packet = bdk_key_type_packet + bdk_key_length_packet + bdk_cipher_data_packet + bdk_cipher_kcv_packet + bdk_ksn_packet + bdk_index_packet + bdk_subsequent_data
+# calculate IPEK
+ipek_plaintext = derive_ipek_from_bdk(bdk_plaintext, initial_ksn)
+ipek_kcv_plaintext = calculate_kcv(ipek_plaintext)
+ipek_cipher = key_encryption_from_kek(ipek_plaintext, kek_tsys)
+ipek_kcv_cipher = key_encryption_from_kek(ipek_kcv_plaintext, kek_tsys)
+# DUKPT injection
+dukpt_key_type_packet = build_upper_layer_packet(type_key_length, '313238')
+dukpt_key_length_packet = build_upper_layer_packet(type_dukpt_3des_aes, '31')
+dukpt_cipher_data_packet = build_upper_layer_packet(type_dukpt_ciphertext_data, ipek_cipher)
+dukpt_cipher_kcv_packet = build_upper_layer_packet(type_dukpt_ciphertext_kcv, ipek_kcv_cipher)
+dukpt_ksn_packet = build_upper_layer_packet(type_dukpt_ksn, bdk_ksn)
+bdk_index_packet = build_upper_layer_packet(type_dukpt_index, bdk_index)
+subsequent_data = build_upper_layer_packet(type_subsequent_data, non_subsequent_data)
+dukpt_full_packet = dukpt_key_type_packet + dukpt_key_length_packet + dukpt_cipher_data_packet + dukpt_cipher_kcv_packet + dukpt_ksn_packet + bdk_index_packet + subsequent_data
 print(f"dukpt_full_packet : {dukpt_full_packet}")
 dukpt_rsa_encrypt_full_packet = rsa_encrypt_hex(rsa_public_key_hex, dukpt_full_packet)
 
