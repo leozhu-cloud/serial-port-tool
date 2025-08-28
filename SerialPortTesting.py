@@ -1,3 +1,5 @@
+import sys
+import logging
 import time
 import binascii
 import serial.tools.list_ports
@@ -8,6 +10,9 @@ from cryptography.hazmat.primitives import hashes
 
 from binascii import unhexlify, hexlify
 from Crypto.Cipher import DES3
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 start = '02'
 payload_mark = 'FFFFFFFF'
@@ -47,9 +52,6 @@ kbpk_kcv = '6F05'
 kbpk_index = '6F06'
 type_subsequent_data = '6F00'
 
-# VARIANT_MASK 是固定的，标准定义，在ANSI X9.24 规范里写死的，处理 IPEK 的时候使用
-VARIANT_MASK = bytes.fromhex('C0C0C0C000000000C0C0C0C000000000')
-
 # make sure we have the Lib
 print(serial.__file__)
 print(hasattr(serial, "Serial"))
@@ -69,6 +71,10 @@ handshake_retry_bytes = bytes.fromhex('020008FFFFFFFF800330300388')
 send_handshake_data_hex = "020006FFFFFFFF00010304"
 # Convert to Bytes
 data_bytes = bytes.fromhex(send_handshake_data_hex)
+
+# VARIANT_MASK 是固定的，标准定义，在ANSI X9.24 规范里写死的，处理 IPEK 的时候使用
+VARIANT_MASK = bytes.fromhex('C0C0C0C000000000C0C0C0C000000000')
+
 # kek information
 kek_tsys = '679BF40E8C1329FD380E83D3A7C157D5'
 # kek_kcv_tsys = 'B5D6451B9BE94349'
@@ -83,14 +89,19 @@ non_subsequent_data = '00'
 
 
 # Serial Port Configuration
-ser = serial.Serial(
-    port=port_name,
-    baudrate=115200,
-    bytesize=serial.EIGHTBITS,
-    parity=serial.PARITY_NONE,
-    stopbits=serial.STOPBITS_ONE,
-    timeout=3
-)
+try:
+    ser = serial.Serial(
+        port=port_name,
+        baudrate=115200,
+        bytesize=serial.EIGHTBITS,
+        parity=serial.PARITY_NONE,
+        stopbits=serial.STOPBITS_ONE,
+        timeout=3
+    )
+except serial.SerialException as e:
+    logger.error(f"串口打开失败: {e}")
+    sys.exit(1)
+
 
 # 等待串口稳定
 time.sleep(2)
@@ -158,76 +169,75 @@ def is_handshake_ok(data: bytes) -> str:
         response ="❌ Failed"
     return response
 
-def parse_sn(data: bytes) -> str:
+def parse_sn(data: bytes) -> str | None:
     """
     先将 bytes 转 HEX 字符串，再按照 TLV 解析 SN
     TLV 格式: 69 01 [长度 2字节] [SN数据]
     """
-    data_hex = data.hex().upper()  # bytes -> HEX
-    # TLV 头部
-    head = type_sn
-    idx = data_hex.find(head)
-    if idx == -1:
+    try:
+        data_hex = data.hex().upper()  # bytes -> HEX
+        # TLV 头部
+        head = type_sn
+        idx = data_hex.find(head)
+        if idx == -1:
+            return None
+
+        # 长度字段 1字节或2字节？原 bytes 用 idx+2:idx+4 两字节
+        length_hex = data_hex[idx + 4: idx + 8]  # 两字节长度 HEX
+        length = int(length_hex, 16)
+        print(f"length: {length}")
+
+        # SN 数据段，每字节对应 2 个 HEX 字符
+        sn_hex = data_hex[idx + 8: idx + 8 + length]
+        print(f"length: {length}, hex: {sn_hex}")
+
+        if len(sn_hex) < length:
+            return None
+
+        # 转回 ASCII
+        sn_bytes = bytes.fromhex(sn_hex)
+        return sn_bytes.decode('ascii')
+
+    except Exception as e:
+        print(f"[ERROR] parse_sn failure: {e}")
         return None
 
-    # 长度字段 1字节或2字节？原 bytes 用 idx+2:idx+4 两字节
-    length_hex = data_hex[idx + 4: idx + 8]  # 两字节长度 HEX
-    length = int(length_hex, 16)
-    print(f"length: {length}")
-
-    # SN 数据段，每字节对应 2 个 HEX 字符
-    sn_hex = data_hex[idx + 8: idx + 8 + length]
-    print(f"length: {length}, hex: {sn_hex}")
-
-    if len(sn_hex) < length:
-        return None
-
-    # 转回 ASCII
-    sn_bytes = bytes.fromhex(sn_hex)
-    return sn_bytes.decode('ascii')
-
-def parse_rsa_public(data: bytes) -> hex:
+def parse_rsa_public(data: bytes) -> hex | None:
     """
     先把 bytes 转 HEX 字符串，再在 HEX 字符串里按 TLV 解析 RSA 公钥
     TLV 格式: 69 02 [长度 2字节] [payload]
     """
-    # 先转换为 HEX 字符串（方便显示）
-    hex_data = data.hex().upper()
-    print(f"Full HEX: {hex_data}")
-    # TLV 中，头是 "6902"
-    head = type_rsa_public_key
-    idx = hex_data.find(head)
-    if idx == -1:
+    try:
+        # 先转换为 HEX 字符串（方便显示）
+        hex_data = data.hex().upper()
+        print(f"Full HEX: {hex_data}")
+        # TLV 中，头是 "6902"
+        head = type_rsa_public_key
+        idx = hex_data.find(head)
+        if idx == -1:
+            return None
+
+        # 长度字段 2字节 -> HEX 字符串 4位
+        length_hex = hex_data[idx + 4: idx + 8]  # 两个字节对应 4 个 HEX 字符
+        length = int(length_hex, 16)
+        print(f"length: {length}")
+
+        # 数据段在 HEX 中，每字节对应两个 HEX 字符
+        payload_hex = hex_data[idx + 8: idx + 8 + length]
+        print(payload_hex)
+        print(len(payload_hex))
+        if len(payload_hex) < length:
+            # 数据不完整
+            return None
+
+        return payload_hex
+
+    except Exception as e:
+        print(f"[ERROR] parse_rsa_public failure: {e}")
         return None
 
-    # 长度字段 2字节 -> HEX 字符串 4位
-    length_hex = hex_data[idx + 4: idx + 8]  # 两个字节对应 4 个 HEX 字符
-    length = int(length_hex, 16)
-    print(f"length: {length}")
 
-    # 数据段在 HEX 中，每字节对应两个 HEX 字符
-    payload_hex = hex_data[idx + 8: idx + 8 + length]
-    print(payload_hex)
-    print(len(payload_hex))
-    if len(payload_hex) < length:
-        # 数据不完整
-        return None
-
-    return payload_hex
-
-
-# frame = read_full_frame(ser)
-# print(type(frame))
-# print(f"raw frame: {frame.hex()}")
-#
-# if verify_checksum(frame):
-#     print("Checksum OK!")
-# else:
-#     print("Checksum Error!")
-
-
-# print(f"Handshake: {is_handshake_ok(response_bytes)}")
-# print("SN:", parse_sn(response_bytes))
+print(f"Handshake: {is_handshake_ok(response_bytes)}")
 
 def rsa_encrypt_hex(pubkey_der_hex: hex, plaintext_hex: hex) -> hex:
     """
@@ -237,29 +247,47 @@ def rsa_encrypt_hex(pubkey_der_hex: hex, plaintext_hex: hex) -> hex:
     :return: 密文Key HEX
     """
     # HEX 转 bytes
-    pubkey_bytes_1 = bytes.fromhex(pubkey_der_hex)
-    print(f"pubkey_bytes1: {pubkey_bytes_1}")
+    pubkey_bytes = bytes.fromhex(pubkey_der_hex)
+    print(f"pubkey_bytes1: {pubkey_bytes}")
 
-    # 明文密钥是按照字符串本身去加密。所以计算的时候也是按照54字节
-    plaintext_bytes_1 = bytes.fromhex(plaintext_hex)
-    print(f"plaintext_bytes1: {plaintext_bytes_1}")
-    plaintext_bytes_2 = plaintext_hex.encode("utf-8")  # 得到54字节
-    print(f"plaintext_bytes2: {plaintext_bytes_2}")
+    # 加密“报文 HEX 文本”的版本（推荐用于 TLV 报文）
+    # 得到54字节，得到字符串本身的内容，例如69，把 "69110006" 当做字符串加密；而不是HEX，例如 69 -> i，然后去加密
+    plaintext_bytes = plaintext_hex.encode("utf-8")
+    print(f"plaintext_bytes2: {plaintext_bytes}")
+
+    # 加密“字节密钥”的版本
+    # 明文密钥是按照字符串本身去加密。所以计算的时候也是按照54字节，所以为什么下面的做法是错误的，因为变成了HEX
+    # plaintext_bytes_1 = bytes.fromhex(plaintext_hex)
+    # print(f"plaintext_bytes1: {plaintext_bytes_1}")
 
     # 载入 RSA 公钥
-    public_key = serialization.load_der_public_key(pubkey_bytes_1)
+    try:
+        public_key = serialization.load_der_public_key(pubkey_bytes)
+    except ValueError as e:
+        print(f"[ERROR] 公钥加载失败: {e}")
+        return None
 
     # 加密
-    ciphertext_bytes = public_key.encrypt(
-        plaintext_bytes_2,
-        padding.PKCS1v15()
-    )
+    try:
+        ciphertext_bytes = public_key.encrypt(
+            plaintext_bytes,
+            padding.PKCS1v15()
+        )
+    except Exception as e:
+        print(f"[ERROR] RSA 加密失败: {e}")
+        return None
+
 
     # 返回 HEX
     return ciphertext_bytes.hex().upper()
 
-sn = parse_sn(response_bytes)
+try:
+    sn = parse_sn(response_bytes)
+except Exception as e:
+    print(f"[ERROR] 解析 SN 失败: {e}")
+    sn = None
 print(f"sn: {sn}")
+
 rsa_public_key_hex = parse_rsa_public(response_bytes)
 print(f"RSA Public Key: {rsa_public_key_hex}")
 
@@ -274,12 +302,12 @@ def calc_checksum(frame_hex: str) -> int:
         checksum ^= b
     return checksum
 
-frame_hex = "013FFFFFFFFF80116901001A504230344439374136303035346902024830820120300D06092A864886F70D01010105000382010D00308201080282010100C1988A7F0E322C248580E5F8F3417C3F50E69977D32D656D4A937ECEB08649889B6B8B6E6581541DB0695D5928E4FC5A60E5BE493BBA82BCA8E5C35418F3DEA3C83831DCB6A29F823903D265A637C51ADFD7E38B6667CD74502D7DC34C2945933746BB0D8E725E3E77C16E7B117BD2B26B5EE375828187390112C0CB3C43BD865C115887A388732DB55BA80EBE330B2EE07BC247BC9AAC60205DB6197414B82068FC06CE70C887DE6038FB2470432DF4463E01EC494C1F6FBC029B8E50827BA9AF49D8380447A306A716341527137733371679D50C8D03DC03E9AA8B043581A212400B7FF225E3BB57B0E217A0B0C1A3EE4D5A89875DDD630DD71355F46EF97302010303"
-
-checksum = bytes([calc_checksum(frame_hex)])
-
-data = bytes.fromhex(frame_hex)+bytes.fromhex(end)+checksum
-print(data.hex().upper())
+# frame_hex = "013FFFFFFFFF80116901001A504230344439374136303035346902024830820120300D06092A864886F70D01010105000382010D00308201080282010100C1988A7F0E322C248580E5F8F3417C3F50E69977D32D656D4A937ECEB08649889B6B8B6E6581541DB0695D5928E4FC5A60E5BE493BBA82BCA8E5C35418F3DEA3C83831DCB6A29F823903D265A637C51ADFD7E38B6667CD74502D7DC34C2945933746BB0D8E725E3E77C16E7B117BD2B26B5EE375828187390112C0CB3C43BD865C115887A388732DB55BA80EBE330B2EE07BC247BC9AAC60205DB6197414B82068FC06CE70C887DE6038FB2470432DF4463E01EC494C1F6FBC029B8E50827BA9AF49D8380447A306A716341527137733371679D50C8D03DC03E9AA8B043581A212400B7FF225E3BB57B0E217A0B0C1A3EE4D5A89875DDD630DD71355F46EF97302010303"
+#
+# checksum = bytes([calc_checksum(frame_hex)])
+#
+# data = bytes.fromhex(frame_hex)+bytes.fromhex(end)+checksum
+# print(data.hex().upper())
 
 
 
@@ -331,32 +359,37 @@ def build_lower_layer_packet(packet_hex: hex, command_hex: hex) -> hex:
     full_frame = frame_without_checksum + bytes([checksum])
     return full_frame.hex().upper()
 
-def parse_initial_ksn(data: bytes) -> str:
+def parse_initial_ksn(data: bytes) -> str | None:
     """
     先将 bytes 转 HEX 字符串，再按照 TLV 解析 SN
     TLV 格式: 69 01 [长度 2字节] [SN数据]
     """
-    data_hex = data.hex().upper()  # bytes -> HEX
-    # TLV 头部
-    head = type_ksn
-    idx = data_hex.find(head)
-    if idx == -1:
+    try:
+        data_hex = data.hex().upper()  # bytes -> HEX
+        # TLV 头部
+        head = type_ksn
+        idx = data_hex.find(head)
+        if idx == -1:
+            return None
+
+        # 长度字段 1字节或2字节？原 bytes 用 idx+2:idx+4 两字节
+        length_hex = data_hex[idx + 4: idx + 8]  # 两字节长度 HEX
+        length = int(length_hex, 16)
+        print(f"length: {length}")
+
+        # KSN 数据段，每字节对应 2 个 HEX 字符
+        ksn_hex = data_hex[idx + 8: idx + 8 + length]
+        print(f"length: {length}, hex: {ksn_hex}")
+
+        if len(ksn_hex) < length:
+            return None
+
+        # 返回hex
+        return ksn_hex
+
+    except Exception as e:
+        print(f"[ERROR] parse_initial_ksn failure: {e}")
         return None
-
-    # 长度字段 1字节或2字节？原 bytes 用 idx+2:idx+4 两字节
-    length_hex = data_hex[idx + 4: idx + 8]  # 两字节长度 HEX
-    length = int(length_hex, 16)
-    print(f"length: {length}")
-
-    # KSN 数据段，每字节对应 2 个 HEX 字符
-    ksn_hex = data_hex[idx + 8: idx + 8 + length]
-    print(f"length: {length}, hex: {ksn_hex}")
-
-    if len(ksn_hex) < length:
-        return None
-
-    # 返回hex
-    return ksn_hex
 
 def derive_ipek_from_bdk(bdk_hex: str, initial_ksn_hex: str) -> str:
     """
@@ -498,9 +531,6 @@ while True:
     response_bytes += chunk
 
 print(f"dukpt_完整数据: {response_bytes.hex().upper()}")
-
-
-
 
 
 # close serial port
