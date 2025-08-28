@@ -161,11 +161,11 @@ def parse_sn(data: bytes) -> str | None:
         # 长度字段 1字节或2字节？原 bytes 用 idx+2:idx+4 两字节
         length_hex = data_hex[idx + 4: idx + 8]  # 两字节长度 HEX
         length = int(length_hex, 16)
-        print(f"length: {length}")
+        print(f"{constants.INFO_LENGTH}: {length}")
 
         # SN 数据段，每字节对应 2 个 HEX 字符
         sn_hex = data_hex[idx + 8: idx + 8 + length]
-        print(f"length: {length}, hex: {sn_hex}")
+        print(f"{constants.INFO_LENGTH}: {length}, hex: {sn_hex}")
 
         if len(sn_hex) < length:
             return None
@@ -196,7 +196,7 @@ def parse_rsa_public(data: bytes) -> hex:
         # 长度字段 2字节 -> HEX 字符串 4位
         length_hex = hex_data[idx + 4: idx + 8]  # 两个字节对应 4 个 HEX 字符
         length = int(length_hex, 16)
-        print(f"length: {length}")
+        print(f"{constants.INFO_LENGTH}: {length}")
 
         # 数据段在 HEX 中，每字节对应两个 HEX 字符
         payload_hex = hex_data[idx + 8: idx + 8 + length]

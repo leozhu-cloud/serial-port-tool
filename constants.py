@@ -98,6 +98,7 @@ FAILURE_RESP = 'Failed'
 RETRY_RESP = 'Retry'
 
 # For Log
+INFO_LENGTH = 'Length'
 INFO_HANDSHAKE_CMD_BYTES = 'Handshake Command (bytes)'
 INFO_SN_RESP = 'SN'
 INFO_RSA_PUBLIC_KEY = 'RSA Public Key'
