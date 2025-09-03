@@ -63,7 +63,7 @@ class ToolApp(tk.Tk):
         self.nav_buttons = {
             "Home": self.show_home,
             "Simulated LKI": self.show_simhsm,
-            "Generate Key": self.show_genkey
+            "Generate Key (coming soon)": self.show_genkey
         }
 
         for i, (name, cmd) in enumerate(self.nav_buttons.items()):
@@ -381,11 +381,11 @@ class ToolApp(tk.Tk):
             valid_key_lengths = (32, 48)
 
         if len(ksn) not in valid_ksn_lengths:
-            messagebox.showerror("Invalid KSN", f"❌ 输入的 KSN 长度为 {len(ksn)}，必须是 {valid_ksn_lengths} 个字符。")
+            messagebox.showerror("Invalid KSN", f"❌ The input KSN length is {len(ksn)}, but it must be {valid_ksn_lengths} characters.")
             return
 
         if len(key_data) not in valid_key_lengths:
-            messagebox.showerror("Invalid Key Data", f"❌ 输入的 Key Data 长度为 {len(key_data)}，必须是 {valid_key_lengths} 个字符。")
+            messagebox.showerror("Invalid Key Data", f"❌ The input Key Data length is {len(key_data)}, but it must be {valid_key_lengths} characters.")
             return
 
         def worker():
