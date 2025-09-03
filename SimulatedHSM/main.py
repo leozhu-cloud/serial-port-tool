@@ -126,5 +126,5 @@ def run_key_injection(port_name: str, baud_rate: int, key_algo: str, bdk_idx: st
 
 
 if __name__ == "__main__":
-    # for testing
-    run_key_injection("/dev/cu.usbserial-10", 115200, '3DES','1112')  # 默认串口/波特率
+    # for testing: hardcode for some information such as bdk data, key type
+    run_key_injection("/dev/cu.usbserial-10", 115200, '3DES','1112', constants.BDK_PLAIN, constants.BDK_3DES_KSN)  # 默认串口/波特率
