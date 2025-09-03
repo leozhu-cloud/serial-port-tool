@@ -1,5 +1,4 @@
-import constants
-
+import SimulatedHSM.simhsm.constants as constants
 import sys
 import logging
 import time
@@ -8,7 +7,6 @@ import serial.tools.list_ports
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import padding
-from cryptography.hazmat.primitives import hashes
 
 from binascii import unhexlify, hexlify
 from Crypto.Cipher import DES3
@@ -80,7 +78,7 @@ def read_full_response(ser, chunk_size: int = constants.SERIAL_READ_SIZE, timeou
             response_bytes += chunk
             start_time = time.time()  # 收到数据，重置超时计时
         else:
-            # 如果超时就退出
+            # if timeout, break the circle
             if time.time() - start_time >= timeout_sec:
                 break
 
@@ -200,8 +198,8 @@ def parse_rsa_public(data: bytes) -> hex:
 
         # 数据段在 HEX 中，每字节对应两个 HEX 字符
         payload_hex = hex_data[idx + 8: idx + 8 + length]
-        print(payload_hex)
-        print(len(payload_hex))
+        logger.debug(f"payload_hex: {payload_hex}")
+        logger.debug(len(payload_hex))
         if len(payload_hex) < length:
             # 数据不完整
             return None
@@ -265,7 +263,7 @@ except Exception as e:
 logger.info(f"{constants.INFO_SN_RESP}: {sn}")
 
 rsa_public_key_hex = parse_rsa_public(response_bytes)
-logger.info(f"{constants.INFO_RSA_PUBLIC_KEY}: {rsa_public_key_hex}")
+logger.info(f"{constants.INFO_RSA_PUB_KEY}: {rsa_public_key_hex}")
 
 def calc_checksum(frame_hex: str) -> int:
     frame = bytes.fromhex(frame_hex)
@@ -351,11 +349,11 @@ def parse_initial_ksn(data: bytes) -> str | None:
         # 长度字段 1字节或2字节？原 bytes 用 idx+2:idx+4 两字节
         length_hex = data_hex[idx + 4: idx + 8]  # 两字节长度 HEX
         length = int(length_hex, 16)
-        print(f"length: {length}")
+        print(f"{constants.INFO_LENGTH}: {length}")
 
         # KSN 数据段，每字节对应 2 个 HEX 字符
         ksn_hex = data_hex[idx + 8: idx + 8 + length]
-        print(f"length: {length}, hex: {ksn_hex}")
+        print(f"{constants.INFO_LENGTH}: {length}, hex: {ksn_hex}")
 
         if len(ksn_hex) < length:
             return None
@@ -452,7 +450,7 @@ kek_kcv = calculate_kcv(constants.KEK_TSYS)
 kek_plaintext_data_packet = build_upper_layer_packet(constants.TYPE_KEK_PLAIN, constants.KEK_TSYS)
 kek_plaintext_kcv_packet = build_upper_layer_packet(constants.TYPE_KEK_KCV, kek_kcv)
 kek_plaintext_full_packet = kek_plaintext_data_packet + kek_plaintext_kcv_packet
-logger.info(f"full_plaintext_kek_data: {kek_plaintext_full_packet}")
+logger.debug(f"full_plaintext_kek_data: {kek_plaintext_full_packet}")
 
 kek_rsa_encrypt_full_packet = rsa_encrypt_hex(rsa_public_key_hex, kek_plaintext_full_packet)
 logger.info(f"kek_rsa_encrypt_full_packet: {kek_rsa_encrypt_full_packet}")
@@ -468,7 +466,10 @@ logger.info(f"{constants.RESP}: {response_bytes.hex().upper()}")
 initial_ksn = parse_initial_ksn(response_bytes)
 logger.info(f"{constants.INFO_INIT_KSN_RESP}: {initial_ksn}")
 
-
+# calculate key length in bits; then change to Hex
+bdk_length_string = str(int((len(constants.BDK_PLAIN) / 2) * 8))
+bdk_length_hex = bdk_length_string.encode('utf-8').hex()
+print(f"bdk_length_hex: {bdk_length_hex}")
 # calculate IPEK
 ipek_plaintext = derive_ipek_from_bdk(constants.BDK_PLAIN, initial_ksn)
 logger.info(f"{constants.INFO_IPEK_PLAIN}: {ipek_plaintext}")
@@ -477,11 +478,11 @@ ipek_kcv_plaintext = calculate_kcv(ipek_plaintext)
 ipek_cipher = key_encryption_from_kek(ipek_plaintext, constants.KEK_TSYS)
 ipek_kcv_cipher = key_encryption_from_kek(ipek_kcv_plaintext, constants.KEK_TSYS)
 # DUKPT injection
-dukpt_key_type_packet = build_upper_layer_packet(constants.TYPE_KEY_LENGTH, '313238')
+dukpt_key_type_packet = build_upper_layer_packet(constants.TYPE_KEY_LENGTH, bdk_length_hex)
 dukpt_key_length_packet = build_upper_layer_packet(constants.TYPE_DUKPT_3DES_AES, '31')
 dukpt_cipher_data_packet = build_upper_layer_packet(constants.TYPE_DUKPT_CIPHER, ipek_cipher)
 dukpt_cipher_kcv_packet = build_upper_layer_packet(constants.TYPE_DUKPT_KCV_CIPHER, ipek_kcv_cipher)
-dukpt_ksn_packet = build_upper_layer_packet(constants.TYPE_DUKPT_KSN, constants.BDK_KSN)
+dukpt_ksn_packet = build_upper_layer_packet(constants.TYPE_DUKPT_KSN, constants.BDK_3DES_KSN)
 bdk_index_packet = build_upper_layer_packet(constants.TYPE_DUKPT_IDX, constants.BDK_IDX)
 subsequent_data = build_upper_layer_packet(constants.TYPE_SUBSEQ_DATA, constants.NO_SUBSEQ)
 
@@ -495,7 +496,7 @@ dukpt_rsa_encrypt_full_packet = rsa_encrypt_hex(rsa_public_key_hex, dukpt_full_p
 dukpt_low_layer_full_package = build_lower_layer_packet(dukpt_rsa_encrypt_full_packet, constants.CMD_DUKPT_INTERACTION)
 logger.info(f"Send {constants.INFO_DUKPT_FULL_LOWER_MESSAGE}: {dukpt_low_layer_full_package}")
 
-# send IPEK response (bytes) to TargetPOS
+# send DUKPT response (bytes) to TargetPOS
 ser.write(bytes.fromhex(dukpt_low_layer_full_package))
 
 response_bytes = read_full_response(ser)

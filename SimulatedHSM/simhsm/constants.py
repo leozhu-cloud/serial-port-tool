@@ -77,9 +77,12 @@ BDK_PLAIN = '0123456789ABCDEFFEDCBA9876543210'
 # BDK_cypher = '2E51D99703F78E38E2C04C645C884BB3'
 # BDK_kcv_plaintext = '08D7B4FB629D0885'
 # BDK_kcv_cypher = '50D2D8ABE11C67EB'
-BDK_KSN = 'FFFF5B467C7DC5E00001'
+BDK_3DES_KSN = 'FFFF5B467C7DC5E00001'
+BDK_AES_KSN = 'FFFF5B467C7DC5E000000001'
 BDK_IDX = '06'
 
+KEY_3DES = '3DES'
+KEY_AES = 'AES'
 
 
 # Error Message
@@ -88,7 +91,8 @@ ERR_PARSE_SN = '[ERROR] Parse SN Failure'
 ERR_PARSE_KSN = '[ERROR] Parse the Initial KSN Failure'
 ERR_RSA_KEY_LOAD = '[ERROR] RSA Public Key Loading Failure'
 ERR_RSA_ENC = '[ERROR] RSA Encryption Failure'
-ERR_BDK_LENGTH = '[ERROR] BDK must be 16 or 24 bytes (32 or 48 characters in hex length). / BDK 必须是 16 或 24 字节 (hex 长度 32 或 48)。'
+ERR_BDK_3DES_LENGTH = '[ERROR] 3DES BDK must be 16 or 24 bytes (32 or 48 characters in hex length). / 3DES BDK 必须是 16 或 24 字节 (hex 长度 32 或 48)。'
+ERR_BDK_AES_LENGTH = '[ERROR] AES BDK must be 16, 24 or 32 bytes (32, 48, 64 characters in hex length). / AES BDK 长度必须是 16, 24 或 32 字节)。'
 ERR_KSN_LENGTH = '[ERROR] KSN must be 10 bytes (20 characters in hex length). / KSN 必须是 10 字节 (hex 长度 20)。'
 
 # Respond Message
@@ -101,7 +105,7 @@ RETRY_RESP = 'Retry'
 INFO_LENGTH = 'Length'
 INFO_HANDSHAKE_CMD_BYTES = 'Handshake Command (bytes)'
 INFO_SN_RESP = 'SN'
-INFO_RSA_PUBLIC_KEY = 'RSA Public Key'
+INFO_RSA_PUB_KEY = 'RSA Public Key'
 INFO_INIT_KSN_RESP = 'Initial KSN'
 
 INFO_KEK_HIGHER_PACKET = 'KEK Higher Layer Packet'
