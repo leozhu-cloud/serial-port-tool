@@ -61,11 +61,11 @@ def derive_ipek_from_bdk(bdk_hex: str, initial_ksn_hex: str, algo: str) -> str:
     """
     派生 IPEK（支持 3DES 或 AES）
     输入:
-      bdk_hex: 16/24 bytes BDK 的十六进制字符串 (such as '0123...3210')
-      ksn_hex: 10 bytes KSN 的十六进制字符串 (such as 'FFFF9876543210E00008')
+      bdk_hex: 16/24 bytes (3DES) / 16/24/32 bytes (AES) BDK 的十六进制字符串 (such as '0123456789ABCDEFFEDCBA9876543210')
+      ksn_hex: 10 bytes (3DES) / 12 bytes (AES) KSN 的十六进制字符串 (such as 'FFFF9876543210E00008')
       algorithm: "3DES" 或 "AES"
     输出:
-      32字节 IPEK 的十六进制字符串
+      IPEK 的十六进制字符串
     """
 
     bdk = binascii.unhexlify(bdk_hex)
@@ -106,19 +106,34 @@ def derive_ipek_from_bdk(bdk_hex: str, initial_ksn_hex: str, algo: str) -> str:
 
         # AES-ECB 加密函数
         def aes_encrypt(block, key):
-            return AES.new(key, AES.MODE_ECB).encrypt(block)
+            padded = pad(block, AES.block_size)  # 16 bytes padding
+            cipher = AES.new(key, AES.MODE_ECB)
+            return cipher.encrypt(padded)
 
-        left = aes_encrypt(data_block.ljust(len(bdk), b'\x00'), bdk)  # AES block the same bytes with BDK
+        # 左分支
+        left = aes_encrypt(data_block, bdk)
 
-        key_variant = bytes(a ^ b for a, b in zip(bdk, VARIANT_MASK_AES[:len(bdk)]))
-        right = aes_encrypt(data_block.ljust(len(bdk), b'\x00'), key_variant)
+        # 右分支 = BDK XOR VARIANT_MASK
+        variant_mask = VARIANT_MASK_AES[:len(bdk)]
+        key_variant = bytes(a ^ b for a, b in zip(bdk, variant_mask))
+        right = aes_encrypt(data_block, key_variant)
 
-        # AES IPEK 取 XOR 结果（the same bytes with BDK）
-        ipek = bytes(x ^ y for x, y in zip(left, right))
+        # XOR 左右，取前 len(left) 字节作为 IPEK
+        # 组合方式：扩展/拼接到和 BDK 一致长度
+        if len(bdk) == 16:
+            ipek = bytes(x ^ y for x, y in zip(left, right))
+        elif len(bdk) == 24:
+            ipek = (bytes(x ^ y for x, y in zip(left, right)) +
+                    bytes(x ^ y for x, y in zip(left[:8], right[:8])))
+        elif len(bdk) == 32:
+            ipek = (bytes(x ^ y for x, y in zip(left, right)) +
+                    bytes(x ^ y for x, y in zip(left, right)))  # 复制一遍
 
     else:
         raise ValueError("'3DES' and 'AES' are only options")
+
     print(f"ipek: {hexlify(ipek).upper().decode()}")
+
     return hexlify(ipek).upper().decode()
 
 
@@ -150,13 +165,13 @@ def key_encryption_from_kek(key_hex: str, kek_hex: str, algo: str, kcv: bool) ->
         if len(kek) not in (16, 24, 32):
             raise ValueError("AES KEK must be 16, 24, or 32 bytes.")
 
-        if len(key) % 16 != 0:
-            raise ValueError("Key must be a multiple of 16 bytes for AES.")
-
         cipher = AES.new(kek, AES.MODE_ECB)
 
         # 🔑 PKCS5Padding 实际上等价于 PKCS7Padding，块大小 16
         padded_key = pad(key, AES.block_size, style="pkcs7")
+
+        if len(padded_key) % 16 != 0:
+            raise ValueError("Key must be a multiple of 16 bytes for AES.")
 
         encrypted = cipher.encrypt(padded_key)
 

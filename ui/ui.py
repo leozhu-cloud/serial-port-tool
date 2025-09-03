@@ -4,6 +4,7 @@ import SimulatedHSM.main as hsm_main
 import SimulatedHSM.simhsm.serial_utils
 import tkinter as tk
 from tkinter import ttk
+from tkinter import messagebox
 import sys
 import datetime
 
@@ -212,9 +213,9 @@ class ToolApp(tk.Tk):
             # 按算法确实KSN字符，如果是3DES，就是10字符；如果是AES，就是12个字符
             alg = self.alg_var.get()
             if alg == "AES":
-                valid_lengths = (12,)
+                valid_lengths = (24,)
             else:  # 3DES
-                valid_lengths = (10,)
+                valid_lengths = (20,)
 
             if length in valid_lengths:
                 self.ksn_length_label.config(fg="green")
@@ -365,10 +366,30 @@ class ToolApp(tk.Tk):
         baud_rate = int(self.baud_combo.get())
         key_alg = self.alg_combo.get()
         key_index = str(self.index_entry.get())
+        key_data = str(self.key_data_var.get())
+        ksn = str(self.ksn_data_var.get())
         print(f"👉 Sending Key Injection command to {self.port_combo.get()} @ {self.baud_combo.get()} baud", flush=True)
 
+        # ============================
+        # 校验 KSN 长度
+        # ============================
+        if key_alg == "AES":
+            valid_ksn_lengths = (24,)
+            valid_key_lengths = (32, 48, 64)
+        else:  # 3DES
+            valid_ksn_lengths = (20,)
+            valid_key_lengths = (32, 48)
+
+        if len(ksn) not in valid_ksn_lengths:
+            messagebox.showerror("Invalid KSN", f"❌ 输入的 KSN 长度为 {len(ksn)}，必须是 {valid_ksn_lengths} 个字符。")
+            return
+
+        if len(key_data) not in valid_key_lengths:
+            messagebox.showerror("Invalid Key Data", f"❌ 输入的 Key Data 长度为 {len(key_data)}，必须是 {valid_key_lengths} 个字符。")
+            return
+
         def worker():
-            hsm_main.run_key_injection(serial_port, baud_rate, key_alg, key_index)
+            hsm_main.run_key_injection(serial_port, baud_rate, key_alg, key_index, key_data, ksn)
 
         threading.Thread(target=worker, daemon=True).start()
 

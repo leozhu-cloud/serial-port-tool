@@ -8,7 +8,7 @@ from os import WCONTINUED
 sys.path.append(os.path.dirname(__file__))  # 把 SimulatedHSM 目录加到 sys.path
 from simhsm import constants, build_packet_utils, serial_utils, parser, crypto_utils
 
-def run_key_injection(port_name: str, baud_rate: int, key_algo: str, bdk_idx: str):
+def run_key_injection(port_name: str, baud_rate: int, key_algo: str, bdk_idx: str, bdk_data: str, ksn: str):
     logger = logging.getLogger(__name__)
 
     # Convert HEX of handshake command to Bytes
@@ -64,12 +64,12 @@ def run_key_injection(port_name: str, baud_rate: int, key_algo: str, bdk_idx: st
     Start DUKPT Injection
     """
     # calculate key length in bits; then change to Hex
-    bdk_length_string = str(int((len(constants.BDK_PLAIN) / 2) * 8))
+    bdk_length_string = str(int((len(bdk_data) / 2) * 8))
     bdk_length_hex = bdk_length_string.encode('utf-8').hex()
     print(f"bdk_length_hex: {bdk_length_hex}")
 
     # calculate IPEK from BDK
-    ipek_plaintext = crypto_utils.derive_ipek_from_bdk(constants.BDK_PLAIN, initial_ksn, key_algo)
+    ipek_plaintext = crypto_utils.derive_ipek_from_bdk(bdk_data, initial_ksn, key_algo)
     print(f"{constants.INFO_IPEK_PLAIN}: {ipek_plaintext}")
     # calculate KCV for IPEK
     ipek_kcv_plaintext = crypto_utils.calculate_kcv(ipek_plaintext, key_algo)
@@ -80,12 +80,12 @@ def run_key_injection(port_name: str, baud_rate: int, key_algo: str, bdk_idx: st
     if key_algo == constants.KEY_3DES:
         key_type = '31'
         ipek_cipher = crypto_utils.key_encryption_from_kek(ipek_plaintext, constants.KEK_TSYS, key_algo, False)
-        dukpt_ksn_packet = build_packet_utils.build_upper_layer_packet(constants.TYPE_DUKPT_KSN, constants.BDK_3DES_KSN)
+        dukpt_ksn_packet = build_packet_utils.build_upper_layer_packet(constants.TYPE_DUKPT_KSN, ksn)
     elif key_algo == constants.KEY_AES:
         key_type = '32'
-        ipek_cipher = crypto_utils.key_encryption_from_kek(ipek_plaintext, '00000000000000000000000000000000', key_algo, False)
+        ipek_cipher = crypto_utils.key_encryption_from_kek(ipek_plaintext, '0' * 32, key_algo, False)
         print(f"ipek_cipher: {ipek_cipher}")
-        dukpt_ksn_packet = build_packet_utils.build_upper_layer_packet(constants.TYPE_DUKPT_KSN, constants.BDK_AES_KSN)
+        dukpt_ksn_packet = build_packet_utils.build_upper_layer_packet(constants.TYPE_DUKPT_KSN, ksn)
     else:
         raise ValueError("Unsupported algorithm: choose 3DES / AES")
 
