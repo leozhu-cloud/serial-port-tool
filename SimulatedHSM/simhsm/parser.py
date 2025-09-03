@@ -52,6 +52,7 @@ def parse_rsa_public(data: bytes) -> hex:
 
 def parse_initial_ksn(data: bytes) -> str | None:
     """
+    initial KSN is from devices
     先将 bytes 转 HEX 字符串，再按照 TLV 解析 SN
     TLV 格式: 69 01 [长度 2字节] [SN数据]
     """

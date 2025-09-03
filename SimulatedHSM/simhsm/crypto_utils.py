@@ -132,8 +132,6 @@ def derive_ipek_from_bdk(bdk_hex: str, initial_ksn_hex: str, algo: str) -> str:
     else:
         raise ValueError("'3DES' and 'AES' are only options")
 
-    print(f"ipek: {hexlify(ipek).upper().decode()}")
-
     return hexlify(ipek).upper().decode()
 
 
@@ -166,7 +164,6 @@ def key_encryption_from_kek(key_hex: str, kek_hex: str, algo: str, kcv: bool) ->
             raise ValueError("AES KEK must be 16, 24, or 32 bytes.")
 
         cipher = AES.new(kek, AES.MODE_ECB)
-
         # 🔑 PKCS5Padding 实际上等价于 PKCS7Padding，块大小 16
         padded_key = pad(key, AES.block_size, style="pkcs7")
 

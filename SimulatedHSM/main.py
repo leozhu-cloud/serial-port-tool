@@ -108,7 +108,7 @@ def run_key_injection(port_name: str, baud_rate: int, key_algo: str, bdk_idx: st
 
     #Encrypted dukpt packet with RSA public key
     dukpt_rsa_encrypt_full_packet = crypto_utils.rsa_encrypt_hex(rsa_pub_key_hex, dukpt_full_packet)
-    print('Leo-2 (rsa_pub_key_hex): ', rsa_pub_key_hex)
+    print('rsa_pub_key_hex: ', rsa_pub_key_hex)
     print('Leo-3: ', dukpt_rsa_encrypt_full_packet)
     dukpt_low_layer_full_package = build_packet_utils.build_lower_layer_packet(dukpt_rsa_encrypt_full_packet, constants.CMD_DUKPT_INTERACTION)
     print(f"Send {constants.INFO_DUKPT_FULL_LOWER_MESSAGE}: {dukpt_low_layer_full_package}")
