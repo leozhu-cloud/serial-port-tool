@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>KeyTool</string>
+    <key>CFBundleDisplayName</key>
+    <string>KeyTool</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.alphaz.keytool</string>
+    <key>CFBundleVersion</key>
+    <string>1.2</string>          <!-- 内部版本 -->
+    <key>CFBundleShortVersionString</key>
+    <string>1.2</string>          <!-- 显示给用户 -->
+    <key>CFBundleIconFile</key>
+    <string>KeyTool.icns</string>
+</dict>
+</plist>

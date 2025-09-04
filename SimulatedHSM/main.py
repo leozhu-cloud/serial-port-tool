@@ -6,7 +6,7 @@ import time
 from os import WCONTINUED
 
 sys.path.append(os.path.dirname(__file__))  # 把 SimulatedHSM 目录加到 sys.path
-from simhsm import constants, build_packet_utils, serial_utils, parser, crypto_utils
+from SimulatedHSM.simhsm import constants, build_packet_utils, serial_utils, parser, crypto_utils
 
 def run_key_injection(port_name: str, baud_rate: int, key_algo: str, bdk_idx: str, bdk_data: str, ksn: str):
     logger = logging.getLogger(__name__)
@@ -55,7 +55,7 @@ def run_key_injection(port_name: str, baud_rate: int, key_algo: str, bdk_idx: st
     print(f"Send {constants.INFO_KEK_FULL_LOWER_MESSAGE}: {kek_lower_layer_full_message}")
     # response after KEK injection
     response_bytes = serial_utils.read_full_response(ser)
-    print(f"{constants.RESP}: {response_bytes.hex().upper()}")
+    print(f"{constants.RESP} - after KEK Injection: {response_bytes.hex().upper()}")
 
     initial_ksn = parser.parse_initial_ksn(response_bytes)
     logger.info(f"{constants.INFO_INIT_KSN_RESP}: {initial_ksn}")
@@ -69,12 +69,12 @@ def run_key_injection(port_name: str, baud_rate: int, key_algo: str, bdk_idx: st
     print(f"bdk_length_hex: {bdk_length_hex}")
 
     # calculate IPEK from BDK
-    ipek_plaintext = crypto_utils.derive_ipek_from_bdk(bdk_data, initial_ksn, key_algo)
+    ipek_plaintext = crypto_utils.derive_ipek_from_bdk(bdk_data, ksn, key_algo)
     print(f"{constants.INFO_IPEK_PLAIN}: {ipek_plaintext}")
     # calculate KCV for IPEK
     ipek_kcv_plaintext = crypto_utils.calculate_kcv(ipek_plaintext, key_algo)
 
-    print(f"SN: {sn}; RSA Pub Key: {rsa_pub_key_hex}; KSN: {initial_ksn}; Plaintext IPEK: {ipek_plaintext}; Plaintext KCV: {ipek_kcv_plaintext}")
+    print(f"SN: {sn}; RSA Pub Key: {rsa_pub_key_hex}; KSN: {ksn}; Plaintext IPEK: {ipek_plaintext}; Plaintext KCV: {ipek_kcv_plaintext}")
 
     # Encrypt IPEK and KCV
     if key_algo == constants.KEY_3DES:

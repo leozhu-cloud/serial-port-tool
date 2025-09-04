@@ -71,8 +71,6 @@ def derive_ipek_from_bdk(bdk_hex: str, initial_ksn_hex: str, algo: str) -> str:
     bdk = binascii.unhexlify(bdk_hex)
 
     ksn = bytearray(binascii.unhexlify(initial_ksn_hex))
-    if len(ksn) != 10:
-        raise ValueError(f"{constants.ERR_KSN_LENGTH}")
 
     # 清零 KSN 低 21 位（DUKPT 规范）
     ksn_masked = ksn[:]
@@ -84,6 +82,9 @@ def derive_ipek_from_bdk(bdk_hex: str, initial_ksn_hex: str, algo: str) -> str:
     data_block = bytes(ksn_masked[:8])
 
     if algo.upper() == "3DES":
+        if len(ksn) != 10:
+            raise ValueError(f"{constants.ERR_KSN_LENGTH}")
+
         if len(bdk) not in (16, 24):
             raise ValueError(f"{constants.ERR_BDK_3DES_LENGTH}")
 
@@ -101,6 +102,9 @@ def derive_ipek_from_bdk(bdk_hex: str, initial_ksn_hex: str, algo: str) -> str:
         ipek = left + right
 
     elif algo.upper() == "AES":
+        if len(ksn) != 12:
+            raise ValueError(f"{constants.ERR_KSN_LENGTH}")
+
         if len(bdk) not in (16, 24, 32):
             raise ValueError(f"{constants.ERR_BDK_AES_LENGTH}")
 

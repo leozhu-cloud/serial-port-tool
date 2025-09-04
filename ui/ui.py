@@ -37,20 +37,6 @@ class ToolApp(tk.Tk):
         self.geometry("900x600")
         self.configure(bg=COLOR_BACKGROUND)
 
-        # Button Style
-        style = ttk.Style()
-        style.configure(
-            "Custom.TButton",
-            background=COLOR_SECONDARY,
-            foreground=COLOR_TEXT_PRIMARY,
-            font=("Arial", 12, "bold"),
-            padding=6
-        )
-        style.map("Custom.TButton",
-                  background=[("active", COLOR_PRIMARY)],
-                  foreground=[("active", COLOR_TEXT_PRIMARY)]
-                  )
-
         # 左边导航栏（主色背景，白色文字）
         self.nav_frame = tk.Frame(self, width=200, bg=COLOR_PRIMARY)
         self.nav_frame.pack(side="left", fill="y")
@@ -145,17 +131,39 @@ class ToolApp(tk.Tk):
         serial_baud_frame = tk.Frame(self.content_frame, bg=COLOR_BACKGROUND)
         serial_baud_frame.pack(fill="x", padx=10, pady=5)
 
-        # 动态获取串口列表
-        available_ports = SimulatedHSM.simhsm.serial_utils.get_available_ports()
-        if not available_ports:
-            available_ports = ["No Ports Found"]  # 没找到串口的 fallback
+        # 刷新串口函数
+        def refresh_ports():
+            ports = SimulatedHSM.simhsm.serial_utils.get_available_ports()
+            if not ports:
+                ports = ["No Ports Found"]
+            self.port_combo['values'] = ports
+            self.port_combo.current(0)
+
+        # Flash Port 按钮
+        flash_btn = tk.Button(
+            serial_baud_frame,
+            text="Flash Port",
+            font=("Arial", 12, "bold"),
+            bg=COLOR_SECONDARY,
+            activebackground=COLOR_PRIMARY,
+            activeforeground=COLOR_TEXT_PRIMARY
+        )
+        flash_btn.grid(row=0, column=0, padx=5, pady=5, sticky="w")
+
+        # # 动态获取串口列表
+        # available_ports = SimulatedHSM.simhsm.serial_utils.get_available_ports()
+        # if not available_ports:
+        #     available_ports = ["No Ports Found"]  # 没找到串口的 fallback
 
         # serial port
-        tk.Label(serial_baud_frame, text="Serial Port:", bg=COLOR_BACKGROUND, fg=COLOR_PRIMARY).grid(row=0, column=0, padx=5, pady=5, sticky="w")
-        self.port_combo = ttk.Combobox(serial_baud_frame, values=available_ports, state="readonly")
-        if available_ports:
-            self.port_combo.current(0)  # 默认选择第一个可用串口
-        self.port_combo.grid(row=0, column=1, padx=5, pady=5, sticky="we") # "we" 表示水平拉伸
+        tk.Label(serial_baud_frame, text="Serial Port:", bg=COLOR_BACKGROUND, fg=COLOR_PRIMARY).grid(row=0, column=1, padx=5, pady=5, sticky="we")
+        self.port_combo = ttk.Combobox(serial_baud_frame, state="readonly")
+        # if available_ports:
+        #     self.port_combo.current(0)  # 默认选择第一个可用串口
+        # self.port_combo.grid(row=0, column=1, padx=5, pady=5, sticky="we") # "we" 表示水平拉伸
+
+        refresh_ports()  # 初始化时刷新一次
+        self.port_combo.grid(row=0, column=2, padx=5, pady=5, sticky="we")
 
         # 波特率选择
         baud_options = [
@@ -164,14 +172,14 @@ class ToolApp(tk.Tk):
         ]
 
         # Baud Rate
-        tk.Label(serial_baud_frame, text="Baud Rate:", bg=COLOR_BACKGROUND, fg=COLOR_PRIMARY).grid(row=0, column=2, padx=5, pady=5, sticky="w")
-        self.baud_combo = ttk.Combobox(serial_baud_frame, values=baud_options, state="readonly")
+        tk.Label(serial_baud_frame, text="Baud Rate:", bg=COLOR_BACKGROUND, fg=COLOR_PRIMARY).grid(row=0, column=3, padx=5, pady=5, sticky="w")
+        self.baud_combo = ttk.Combobox(serial_baud_frame, values=baud_options, state="readonly", width=8)
         self.baud_combo.set("115200") # 直接设置默认值为 115200
-        self.baud_combo.grid(row=0, column=3, padx=5, pady=5, sticky="we") # "we" 表示水平拉伸
+        self.baud_combo.grid(row=0, column=4, padx=5, pady=5, sticky="w") # 不拉伸
 
         # 调整列权重，让 Combobox 自适应拉伸
-        serial_baud_frame.columnconfigure(1, weight=1)
-        serial_baud_frame.columnconfigure(3, weight=1)
+        serial_baud_frame.columnconfigure(2, weight=2)
+        serial_baud_frame.columnconfigure(4, weight=0)
 
         # -------------------------
         # 父容器
@@ -181,7 +189,7 @@ class ToolApp(tk.Tk):
         key_index_inject_frame.pack(fill="x", padx=10, pady=5)
 
         # Algorithm Type
-        tk.Label(key_index_inject_frame, text="Algorithm Type:", bg=COLOR_BACKGROUND, fg=COLOR_PRIMARY).grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        tk.Label(key_index_inject_frame, text="Algorithm Type:", bg=COLOR_BACKGROUND, fg=COLOR_PRIMARY).grid(row=0, column=0, padx=5, pady=5, sticky="we")
         self.alg_var = tk.StringVar()
         self.alg_combo = ttk.Combobox(
             key_index_inject_frame,
@@ -302,11 +310,14 @@ class ToolApp(tk.Tk):
         self.key_length_label.grid(row=0, column=2, padx=5, pady=5, sticky="w")
 
         # Key Injection 按钮
-        key_injection_btn = ttk.Button(
+        key_injection_btn = tk.Button(
             key_data_inject_frame,
             text="Key Injection",
             command=self.do_key_injection,
-            style="Custom.TButton"
+            font=("Arial", 12, "bold"),
+            bg=COLOR_SECONDARY,
+            activebackground=COLOR_PRIMARY,
+            activeforeground=COLOR_TEXT_PRIMARY
         )
         key_injection_btn.grid(row=0, column=3, padx=10, pady=5)
 
