@@ -1,7 +1,6 @@
 # =========================
 # 常量管理
 # =========================
-from doctest import FAIL_FAST
 
 # 串口相关
 SERIAL_READ_SIZE = 1024
