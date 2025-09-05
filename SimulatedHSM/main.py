@@ -4,6 +4,7 @@ import os
 import logging
 import time
 
+
 sys.path.append(os.path.dirname(__file__))  # 把 SimulatedHSM 目录加到 sys.path
 from SimulatedHSM.simhsm import constants, build_packet_utils, serial_utils, parser, crypto_utils
 
