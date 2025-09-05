@@ -10,26 +10,32 @@ jobs:
   build-windows:
     runs-on: windows-latest
     steps:
+      # 1. 拉取代码
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # 2. 设置 Python
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
+      # 3. 安装依赖
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller
+          pip install pyinstaller pillow
 
+      # 4. 使用 PyInstaller 打包
       - name: Build with PyInstaller (onedir mode)
         run: |
-          pyinstaller --onedir --windowed SerialPortTestingWithUI.py
+          pyinstaller -y --onedir --windowed --name KeyTool --icon KeyTool.icns --add-data "SimulatedHSM;SimulatedHSM" ui\ui.py
 
+      # 5. 上传打包好的 dist 文件夹作为 artifact
       - name: Upload build folder
         uses: actions/upload-artifact@v4
         with:
-          name: SerialPortTestingWithUI-Windows
-          path: dist/SerialPortTestingWithUI/**
+          name: KeyTool-Windows
+          path: dist/KeyTool/
