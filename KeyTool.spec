@@ -37,16 +37,12 @@ exe = EXE(
     [],
     exclude_binaries=True,
     name='KeyTool',
+    icon='KeyTool.ico'
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
     console=False,
-    disable_windowed_traceback=False,
-    argv_emulation=False,
-    target_arch='arm64',
-    codesign_identity=None,
-    entitlements_file=None,
 )
 
 # ------------------------------
