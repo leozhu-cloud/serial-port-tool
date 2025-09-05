@@ -17,7 +17,7 @@ a = Analysis(
     ['ui/ui.py'],
     pathex=['.'],
     binaries=[],
-    datas=[],
+    datas=[('SimulatedHSM', 'SimulatedHSM')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
