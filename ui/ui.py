@@ -143,6 +143,7 @@ class ToolApp(tk.Tk):
         flash_btn = tk.Button(
             serial_baud_frame,
             text="Flash Port",
+            command=refresh_ports,  # 👈 点按钮时刷新串口
             font=("Arial", 12, "bold"),
             bg=COLOR_SECONDARY,
             activebackground=COLOR_PRIMARY,
