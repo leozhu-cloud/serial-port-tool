@@ -37,7 +37,7 @@ exe = EXE(
     [],
     exclude_binaries=True,
     name='KeyTool',
-    icon='KeyTool.ico'
+    icon='KeyTool.ico',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
