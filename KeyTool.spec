@@ -18,7 +18,12 @@ a = Analysis(
     pathex=['.'],
     binaries=[],
     datas=[('SimulatedHSM', 'SimulatedHSM')],
-    hiddenimports=[],
+    hiddenimports=[
+        'Crypto',
+        'Crypto.Cipher',
+        'Crypto.Cipher.DES3',
+        'Crypto.Cipher.AES',
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
