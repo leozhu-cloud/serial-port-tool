@@ -2,6 +2,9 @@ import threading
 
 import SimulatedHSM.main as hsm_main
 import SimulatedHSM.simhsm.serial_utils
+
+import GenerateKey.main as genkey_main
+
 import tkinter as tk
 from tkinter import ttk
 from tkinter import messagebox
@@ -14,6 +17,52 @@ COLOR_SECONDARY = "#00BCD4"     # 青绿 按钮/高亮
 COLOR_BACKGROUND = "#FFFFFF"    # 内容区背景
 COLOR_TEXT_PRIMARY = "#FFFFFF"  # 白色文字
 COLOR_TEXT_SECONDARY = "#B0BEC5"  # 灰色文字
+
+
+def make_validator(var, length_label, aes_lengths, des_lengths, alg_var=None, fixed_alg=None):
+    """
+    通用校验函数工厂
+    var: tk.StringVar 绑定的输入变量
+    length_label: 显示长度的 Label
+    aes_lengths: tuple, AES 合法长度
+    des_lengths: tuple, 3DES 合法长度
+    alg_var: tk.StringVar 算法选择变量 (AES/3DES)，可选
+    fixed_alg: str 固定算法 ("AES"/"3DES")，可选 such as calculate KCV
+    """
+
+    def validate(*args):
+        text = var.get()
+
+        # 清理非法字符，只保留 0-9A-Fa-f
+        cleaned = "".join(c for c in text if c in "0123456789abcdefABCDEF")
+        if cleaned != text:
+            var.set(cleaned)
+
+        length = len(cleaned)
+        length_label.config(text=f"{length} chars")
+
+        # 选择算法来源
+        if alg_var is not None:
+            alg = alg_var.get()
+        elif fixed_alg is not None:
+            alg = fixed_alg
+        else:
+            raise ValueError("必须提供 alg_var 或 fixed_alg 之一")
+
+        # 根据算法选择合法长度
+        if alg == "AES":
+            valid_lengths = aes_lengths
+        else:
+            valid_lengths = des_lengths
+
+        if length in valid_lengths:
+            length_label.config(fg="green")
+        else:
+            length_label.config(fg="red")
+
+    return validate
+
+
 
 class RedirectText(object):
     """把 print() 重定向到 Text 控件"""
@@ -29,7 +78,7 @@ class RedirectText(object):
 
 
 class ToolApp(tk.Tk):
-    VERSION = "v1.2"  # 版本号
+    VERSION = "v1.3"  # 版本号
 
     def __init__(self):
         super().__init__()
@@ -49,7 +98,7 @@ class ToolApp(tk.Tk):
         self.nav_buttons = {
             "Home": self.show_home,
             "Simulated LKI": self.show_simhsm,
-            "Generate Key (coming soon)": self.show_genkey
+            "Key Operation": self.show_genkey,
         }
 
         for i, (name, cmd) in enumerate(self.nav_buttons.items()):
@@ -184,7 +233,7 @@ class ToolApp(tk.Tk):
 
         # -------------------------
         # 父容器
-        # Key Index and key Type, and Key Injeciton Button
+        # key Type, Key Index, and KSN
         # -------------------------
         key_index_inject_frame = tk.Frame(self.content_frame, bg=COLOR_BACKGROUND)
         key_index_inject_frame.pack(fill="x", padx=10, pady=5)
@@ -196,7 +245,8 @@ class ToolApp(tk.Tk):
             key_index_inject_frame,
             textvariable=self.alg_var,
             values=["AES", "3DES"],
-            state="readonly"
+            state="readonly",
+            width = 6,
         )
         self.alg_combo.set("3DES")  # 默认值
         self.alg_combo.grid(row=0, column=1, padx=5, pady=5, sticky="we")
@@ -205,7 +255,12 @@ class ToolApp(tk.Tk):
         tk.Label(key_index_inject_frame, text="Key Index:", bg=COLOR_BACKGROUND, fg=COLOR_PRIMARY).grid(row=0, column=2, padx=5, pady=5, sticky="w")
         # Key Index 输入框，允许手动输入，限制为数字，最多2位
         self.index_var = tk.StringVar()
-        self.index_entry = ttk.Combobox(key_index_inject_frame, textvariable=self.index_var)
+        self.index_entry = ttk.Combobox(
+            key_index_inject_frame,
+            textvariable=self.index_var,
+            state="readonly",
+            width=1,
+        )
         self.index_entry['state'] = "readonly"
         self.index_entry.grid(row=0, column=3, padx=5, pady=5, sticky="we")
 
@@ -213,26 +268,6 @@ class ToolApp(tk.Tk):
         tk.Label(key_index_inject_frame, text="KSN:", bg=COLOR_BACKGROUND, fg=COLOR_PRIMARY).grid(row=0, column=4, padx=5, pady=5,sticky="w")
         # KSN Data 输入框 (只允许10/12字符)
         self.ksn_data_var = tk.StringVar()
-
-        def validate_ksn_data(*args):
-            text = self.ksn_data_var.get()
-            length = len(text)
-            self.ksn_length_label.config(text=f"{length} chars")
-
-            # 按算法确实KSN字符，如果是3DES，就是10字符；如果是AES，就是12个字符
-            alg = self.alg_var.get()
-            if alg == "AES":
-                valid_lengths = (24,)
-            else:  # 3DES
-                valid_lengths = (20,)
-
-            if length in valid_lengths:
-                self.ksn_length_label.config(fg="green")
-            else:
-                self.ksn_length_label.config(fg="red")
-
-        self.ksn_data_var.trace_add("write", validate_ksn_data)
-
         self.ksn_data_entry = tk.Entry(
             key_index_inject_frame,
             textvariable=self.ksn_data_var,
@@ -249,6 +284,14 @@ class ToolApp(tk.Tk):
             fg="red"
         )
         self.ksn_length_label.grid(row=0, column=6, padx=5, pady=5, sticky="w")
+        ksn_validator = make_validator(
+            self.ksn_data_var,
+            self.ksn_length_label,
+            aes_lengths=(24,),
+            des_lengths=(20,),
+            alg_var=self.alg_var,
+        )
+        self.ksn_data_var.trace_add("write", ksn_validator)
 
         # 列权重，让输入框水平拉伸
         key_index_inject_frame.columnconfigure(1, weight=1)
@@ -258,7 +301,7 @@ class ToolApp(tk.Tk):
 
         # -------------------------
         # 父容器
-        # Key Index and key Type, and Key Injeciton Button
+        # Key Data, and Key Injection Button
         key_data_inject_frame = tk.Frame(self.content_frame, bg=COLOR_BACKGROUND)
         key_data_inject_frame.pack(fill="x", padx=10, pady=5)
 
@@ -266,33 +309,6 @@ class ToolApp(tk.Tk):
         tk.Label(key_data_inject_frame, text="Key Data:", bg=COLOR_BACKGROUND, fg=COLOR_PRIMARY).grid(row=0, column=0, padx=5, pady=5, sticky="w")
         # Key Data 输入框 (只允许32/48/64字符)
         self.key_data_var = tk.StringVar()
-
-        def validate_key_data(*args):
-            text = self.key_data_var.get()
-            length = len(text)
-            self.key_length_label.config(text=f"{length} chars")
-
-            # 按算法确实Key的长度，如果是3DES，就是16或者24字符；如果是AES，就是16，24，32个字符
-            alg = self.alg_var.get()
-            if alg == "AES":
-                valid_lengths = (32, 48, 64,)
-            else:  # 3DES
-                valid_lengths = (32, 48,)
-
-            if length in valid_lengths:
-                self.key_length_label.config(fg="green")
-            else:
-                self.key_length_label.config(fg="red")
-
-
-            # # 如果输入不是32/48/64个字符，红色提示
-            # if length in (32, 48, 64):
-            #     self.key_length_label.config(fg="green")
-            # else:
-            #     self.key_length_label.config(fg="red")
-
-        self.key_data_var.trace_add("write", validate_key_data)
-
         self.key_data_entry = tk.Entry(
             key_data_inject_frame,
             textvariable=self.key_data_var,
@@ -309,6 +325,14 @@ class ToolApp(tk.Tk):
             fg="red"
         )
         self.key_length_label.grid(row=0, column=2, padx=5, pady=5, sticky="w")
+        key_validator = make_validator(
+            self.key_data_var,
+            self.key_length_label,
+            aes_lengths=(32, 48, 64,),
+            des_lengths=(32, 48,),
+            alg_var=self.alg_var,
+        )
+        self.key_data_var.trace_add("write", key_validator)
 
         # Key Injection 按钮
         key_injection_btn = tk.Button(
@@ -356,21 +380,7 @@ class ToolApp(tk.Tk):
         sys.stdout = RedirectText(self.log_text)
         print("✅ Simulated HSM initialized.")
 
-    # gen_key_button in the navigation column
-    def show_genkey(self):
-        self.clear_content()
-        tk.Label(self.content_frame, text="Generate Key", font=("Arial", 16), bg=COLOR_BACKGROUND, fg=COLOR_PRIMARY).pack(pady=10)
-        tk.Button(
-            self.content_frame,
-            text="Generate",
-            command=self.do_generate_key
-        ).pack(pady=20)
 
-        self.log_text = tk.Text(self.content_frame, height=15, bg=COLOR_PRIMARY, fg=COLOR_TEXT_PRIMARY)
-        self.log_text.pack(fill="both", expand=True, padx=10, pady=5)
-
-        sys.stdout = RedirectText(self.log_text)
-        print("🔑 Ready to generate key.")
 
     # Simulated HSM 功能函数
     def do_key_injection(self):
@@ -394,10 +404,12 @@ class ToolApp(tk.Tk):
 
         if len(ksn) not in valid_ksn_lengths:
             messagebox.showerror("Invalid KSN", f"❌ The input KSN length is {len(ksn)}, but it must be {valid_ksn_lengths} characters.")
+            print(f"❌ The input KSN length is {len(ksn)}, but it must be {valid_ksn_lengths} characters.")
             return
 
         if len(key_data) not in valid_key_lengths:
             messagebox.showerror("Invalid Key Data", f"❌ The input Key Data length is {len(key_data)}, but it must be {valid_key_lengths} characters.")
+            print(f"❌ The input Key Data length is {len(key_data)}, but it must be {valid_key_lengths} characters.")
             return
 
         def worker():
@@ -405,9 +417,318 @@ class ToolApp(tk.Tk):
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def do_generate_key(self):
-        print("🔐 Generating new key...")
-        print("✅ Key generated successfully.")
+
+    # gen_key_button in the navigation column
+    def show_genkey(self):
+        self.clear_content()
+        tk.Label(self.content_frame, text="Key Operation", font=("Arial", 16), bg=COLOR_BACKGROUND,
+                 fg=COLOR_PRIMARY).pack(pady=10)
+
+        # 选择组件数量 (下拉框)
+        selection_frame = tk.Frame(self.content_frame, bg=COLOR_BACKGROUND)
+        selection_frame.pack(pady=5)
+
+        tk.Label(selection_frame, text="Components:", bg=COLOR_BACKGROUND, fg=COLOR_PRIMARY).pack(side="left")
+
+        self.comp_var = tk.StringVar(value="2")
+        comp_combo = ttk.Combobox(
+            selection_frame,
+            textvariable=self.comp_var,
+            values=["2", "3"],
+            width=5,
+            state="readonly"
+        )
+        comp_combo.pack(side="left", padx=5)
+
+        # 绑定下拉框选择事件 → 自动刷新 component 输入框
+        comp_combo.bind("<<ComboboxSelected>>", self.update_components)
+
+        # Combine Keys 按钮（只做业务逻辑，不刷新输入框）
+        tk.Button(
+            selection_frame,
+            text="Combine",
+            command=self.do_combine_keys  # 你自己的逻辑
+        ).pack(side="left", padx=10)
+
+        # 放置 component 输入框的容器
+        self.components_frame = tk.Frame(self.content_frame, bg=COLOR_BACKGROUND)
+        self.components_frame.pack(pady=10, fill="x")
+
+        # 默认显示 2 个输入框
+        self.update_components()
+
+        # -------------------------
+        # 父容器
+        # Key Operation Button such as Encryption Button, Calculate KCV Button
+        key_operation_button_frame = tk.Frame(self.content_frame, bg=COLOR_BACKGROUND)
+        key_operation_button_frame.pack(fill="x", padx=10, pady=(16,5))
+
+        # Algorithm Type
+        tk.Label(key_operation_button_frame, text="Algorithm Type:", bg=COLOR_BACKGROUND, fg=COLOR_PRIMARY).grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        self.kcv_alg_var = tk.StringVar()
+        self.kcv_alg_combo = ttk.Combobox(
+            key_operation_button_frame,
+            textvariable=self.kcv_alg_var,
+            values=["AES", "3DES"],
+            state="readonly",
+            width=6,
+        )
+        self.kcv_alg_combo.set("3DES")  # 默认值
+        self.kcv_alg_combo.grid(row=0, column=1, padx=5, pady=5, sticky="we")
+
+        # Calculate KCV Button
+        calculate_kcv_btn = tk.Button(
+            key_operation_button_frame,
+            text="Calculate KCV",
+            command=self.do_calculate_kcv,
+            font=("Arial", 12, "bold"),
+            bg=COLOR_SECONDARY,
+            activebackground=COLOR_PRIMARY,
+            activeforeground=COLOR_TEXT_PRIMARY,
+            width=10,
+        )
+        calculate_kcv_btn.grid(row=0, column=2, padx=10, pady=5, sticky="we")
+
+        # Data Encryption Button
+        encryption_btn = tk.Button(
+            key_operation_button_frame,
+            text="Encrypt Data",
+            command=self.do_encryption,
+            font=("Arial", 12, "bold"),
+            bg=COLOR_SECONDARY,
+            activebackground=COLOR_PRIMARY,
+            activeforeground=COLOR_TEXT_PRIMARY,
+            width=10,
+        )
+        encryption_btn.grid(row=0, column=3, padx=10, pady=5, sticky="we")
+
+        # Data Decryption Button
+        decryption_btn = tk.Button(
+            key_operation_button_frame,
+            text="Decrypt Data",
+            command=self.do_decryption,
+            font=("Arial", 12, "bold"),
+            bg=COLOR_SECONDARY,
+            activebackground=COLOR_PRIMARY,
+            activeforeground=COLOR_TEXT_PRIMARY,
+            width=10,
+        )
+        decryption_btn.grid(row=0, column=4, padx=10, pady=5, sticky="we")
+
+        key_operation_button_frame.columnconfigure(1, weight=1)
+        key_operation_button_frame.columnconfigure(2, weight=1)
+        key_operation_button_frame.columnconfigure(3, weight=1)
+        key_operation_button_frame.columnconfigure(4, weight=1)
+
+        # -------------------------
+        # 父容器
+        # Key Information
+        key_information_frame = tk.Frame(self.content_frame, bg=COLOR_BACKGROUND)
+        key_information_frame.pack(fill="x", padx=10, pady=5)
+
+        # Key Information (16, 24)
+        tk.Label(key_information_frame, text="Key:", bg=COLOR_BACKGROUND, fg=COLOR_PRIMARY).grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        # Key 输入框 (只允许32/48/64字符)
+        self.key_var = tk.StringVar()
+        self.key_entry = tk.Entry(
+            key_information_frame,
+            textvariable=self.key_var,
+            bg="white",
+            fg="black"
+        )
+        self.key_entry.grid(row=0, column=1, padx=5, pady=5, sticky="we")
+
+        # 在输入框后显示当前长度
+        self.key_length_label = tk.Label(
+            key_information_frame,
+            text="0 chars",
+            bg=COLOR_BACKGROUND,
+            fg="red"
+        )
+        self.key_length_label.grid(row=0, column=2, padx=5, pady=5, sticky="w")
+
+        key_validator = make_validator(
+            self.key_var,
+            self.key_length_label,
+            aes_lengths=(32, 48, 64,),
+            des_lengths=(32, 48,),
+            alg_var=self.kcv_alg_var,
+        )
+        self.key_var.trace_add("write", key_validator)
+
+        key_information_frame.columnconfigure(1, weight=1)
+
+        # -------------------------
+        # 父容器
+        # Data Information
+        data_information_frame = tk.Frame(self.content_frame, bg=COLOR_BACKGROUND)
+        data_information_frame.pack(fill="x", padx=10, pady=5)
+
+        # Key Information (16, 24)
+        tk.Label(data_information_frame, text="Data:", bg=COLOR_BACKGROUND, fg=COLOR_PRIMARY).grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        # Key Data 输入框 (只允许32/48/64字符)
+        self.data_var = tk.StringVar()
+        self.data_entry = tk.Entry(
+            data_information_frame,
+            textvariable=self.data_var,
+            bg="white",
+            fg="black"
+        )
+        self.data_entry.grid(row=0, column=1, padx=5, pady=5, sticky="we")
+
+        # 在输入框后显示当前长度
+        self.data_length_label = tk.Label(
+            data_information_frame,
+            text="0 chars",
+            bg=COLOR_BACKGROUND,
+            fg="red"
+        )
+        self.data_length_label.grid(row=0, column=2, padx=5, pady=5, sticky="w")
+
+        key_validator = make_validator(
+            self.data_var,
+            self.data_length_label,
+            aes_lengths=(32, 48, 64,),
+            des_lengths=(32, 48,),
+            alg_var=self.kcv_alg_var,
+        )
+        self.data_var.trace_add("write", key_validator)
+
+        data_information_frame.columnconfigure(1, weight=1)
+
+
+        self.log_text = tk.Text(self.content_frame, height=15, bg=COLOR_PRIMARY, fg=COLOR_TEXT_PRIMARY)
+        self.log_text.pack(fill="both", expand=True, padx=10, pady=5)
+
+        sys.stdout = RedirectText(self.log_text)
+        print("🔑 Ready to do key operation.")
+
+    def update_components(self, event=None):
+        """根据下拉框选择自动刷新 Component 输入框，并显示长度"""
+        for widget in self.components_frame.winfo_children():
+            widget.destroy()
+
+        num = int(self.comp_var.get())
+        self.key_entries = []
+        self.length_labels = []
+
+        # 定义十六进制校验函数
+        def validate_hex_input(char):
+            return char == "" or all(c in "/0123456789abcdefABCDEF" for c in char)
+
+        vcmd = (self.content_frame.register(validate_hex_input), "%P")
+
+        for i in range(num):
+            frame = tk.Frame(self.components_frame, bg=COLOR_BACKGROUND)
+            frame.pack(fill="x", pady=3)
+
+            tk.Label(frame, text=f"Component {i+1} Key Data:", bg=COLOR_BACKGROUND, fg=COLOR_PRIMARY).grid(row=0, column=0, padx=5)
+
+            component_var = tk.StringVar()
+            entry = tk.Entry(
+                frame, width=48,
+                textvariable=component_var,
+                validate="key",  # 开启实时校验
+                validatecommand=vcmd
+            )
+            entry.grid(row=0, column=1, padx=5, pady=5, sticky="we")
+
+            # 显示长度
+            len_label = tk.Label(frame, text="0 chars", bg=COLOR_BACKGROUND, fg="red", width=6)
+            len_label.grid(row=0, column=2, padx=5, pady=5, sticky="w")
+
+            # 保存 Entry 和 StringVar 的引用
+            self.key_entries.append(entry)
+
+            key_validator = make_validator(
+                component_var,
+                len_label,
+                aes_lengths=(32, 48, 64,),
+                des_lengths=(32, 48,),
+                fixed_alg="AES",
+            )
+            component_var.trace_add("write", key_validator)
+
+            # 列权重，让输入框水平拉伸
+            frame.columnconfigure(1, weight=1)
+
+
+    def do_combine_keys(self):
+        """点击 Combine Keys 时执行的业务逻辑"""
+        print("🔗 Combine Keys button clicked.")
+        keys = [e.get().strip() for e in getattr(self, "key_entries", [])]
+
+        # 校验是否为空
+        for i, k in enumerate(keys, start=1):
+            if not k:
+                messagebox.showerror("输入错误", f"Component {i} 为空，请输入 Key Data")
+                print(f"❌ Component {i} 为空，请输入 Key Data")
+                return
+            if len(k) not in (32, 48, 64):
+                messagebox.showerror("输入错误", f"Component {i} 长度非法 ({len(k)}), 必须是 32/48/64 个字符")
+                print(f"❌ Component {i} 长度非法 ({len(k)})，必须是 32/48/64 个字符")
+                return
+            # 可选：校验是否为十六进制
+            try:
+                int(k, 16)
+            except ValueError:
+                messagebox.showerror("输入错误", f"Component {i} 不是有效的十六进制")
+                return
+
+        # 校验长度是否一致
+        lengths = [len(k) for k in keys]
+        if len(set(lengths)) != 1:
+            messagebox.showerror("输入错误", "所有 Component 的长度必须一致")
+            print(f"❌ Component {i} 长度非法 ({len(k)})，必须是 32/48/64 个字符")
+            return
+
+        # 校验通过，执行真正的 Combine Keys 逻辑
+        print(f"🔗 Combining {len(keys)} components...")
+        for i, k in enumerate(keys, start=1):
+            print(f"Component {i}: {k}")
+
+        def worker():
+            genkey_main.run_combine_key(keys)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def do_calculate_kcv(self):
+        """"点击 Calculate KCV Button 时执行的业务逻辑"""
+        print("🔗 Calculate KCV button clicked.")
+
+        key_hex = self.key_var.get()
+        algo_type = self.kcv_alg_var.get()
+
+        def worker():
+            genkey_main.run_calculate_kcv(key_hex, algo_type)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def do_encryption(self):
+        """点击 Encryption Button 时执行的业务逻辑"""
+        print("🔗 Encrypt the data with the key.")
+
+        algo_type = self.kcv_alg_var.get()
+        key_hex = self.key_var.get()
+        data_hex = self.data_var.get()
+
+        def worker():
+            genkey_main.run_encryption(data_hex, key_hex, algo_type)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def do_decryption(self):
+        """点击 Decryption Button 时执行的业务逻辑"""
+        print("🔗 Decrypt the data with the key.")
+
+        algo_type = self.kcv_alg_var.get()
+        key_hex = self.key_var.get()
+        data_hex = self.data_var.get()
+
+        def worker():
+            genkey_main.run_decryption(data_hex, key_hex, algo_type)
+
+        threading.Thread(target=worker, daemon=True).start()
 
 
 if __name__ == "__main__":

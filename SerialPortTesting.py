@@ -1,4 +1,4 @@
-import SimulatedHSM.simhsm.constants as constants
+import constants as constants
 import sys
 import logging
 import time
@@ -434,7 +434,7 @@ def calculate_kcv(key_hex: str) -> str:
     if len(key) == 16:
         key += key[:8]  # 双长补成三段式 K1-K2-K1
     elif len(key) != 24:
-        raise ValueError("Key must be either 16 or 24 bytes (32 or 48 hex characters)")
+        raise ValueError("GenerateKey must be either 16 or 24 bytes (32 or 48 hex characters)")
 
     cipher = DES3.new(key, DES3.MODE_ECB)
     zero_block = b'\x00' * 8

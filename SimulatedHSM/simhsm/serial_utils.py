@@ -2,7 +2,7 @@ import time
 import serial
 import logging
 import serial.tools.list_ports
-from . import constants
+import constants
 
 logger = logging.getLogger(__name__)
 

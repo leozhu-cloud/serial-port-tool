@@ -70,9 +70,10 @@ YES_SUBSEQ = '01'
 
 # kek information
 KEK_TSYS = '679BF40E8C1329FD380E83D3A7C157D5'
-
+KEK_NAB = '657272BEA027D73F35C6E11D3C3990592E72FCACFA9CD2DB'
 # bdk information
 BDK_PLAIN = '0123456789ABCDEFFEDCBA9876543210'
+BDK_CIPHER = '81EE91B0788AB6CFD211C17FD55B8298D064AD19E23B258F8DDCC31985397EAD'
 # BDK_cypher = '2E51D99703F78E38E2C04C645C884BB3'
 # BDK_kcv_plaintext = '08D7B4FB629D0885'
 # BDK_kcv_cypher = '50D2D8ABE11C67EB'
@@ -85,10 +86,10 @@ KEY_AES = 'AES'
 
 
 # Error Message
-ERR_PARSE_RSA = '[ERROR] Parse RSA Public Key Failure'
+ERR_PARSE_RSA = '[ERROR] Parse RSA Public GenerateKey Failure'
 ERR_PARSE_SN = '[ERROR] Parse SN Failure'
 ERR_PARSE_KSN = '[ERROR] Parse the Initial KSN Failure'
-ERR_RSA_KEY_LOAD = '[ERROR] RSA Public Key Loading Failure'
+ERR_RSA_KEY_LOAD = '[ERROR] RSA Public GenerateKey Loading Failure'
 ERR_RSA_ENC = '[ERROR] RSA Encryption Failure'
 ERR_BDK_3DES_LENGTH = '[ERROR] 3DES BDK must be 16 or 24 bytes (32 or 48 characters in hex length). / 3DES BDK 必须是 16 或 24 字节 (hex 长度 32 或 48)。'
 ERR_BDK_AES_LENGTH = '[ERROR] AES BDK must be 16, 24 or 32 bytes (32, 48, 64 characters in hex length). / AES BDK 长度必须是 16, 24 或 32 字节)。'
@@ -104,7 +105,7 @@ RETRY_RESP = 'Retry'
 INFO_LENGTH = 'Length'
 INFO_HANDSHAKE_CMD_BYTES = 'Handshake Command (bytes)'
 INFO_SN_RESP = 'SN'
-INFO_RSA_PUB_KEY = 'RSA Public Key'
+INFO_RSA_PUB_KEY = 'RSA Public GenerateKey'
 INFO_INIT_KSN_RESP = 'Initial KSN'
 
 INFO_KEK_HIGHER_PACKET = 'KEK Higher Layer Packet'
@@ -113,3 +114,9 @@ INFO_KEK_FULL_LOWER_MESSAGE = 'KEK Full Lower Layer Message'
 INFO_IPEK_PLAIN = 'IPEK Plaintext'
 INFO_DUKPT_HIGHER_PACKET = 'DUKPT Higher Layer Packet'
 INFO_DUKPT_FULL_LOWER_MESSAGE = 'DUKPT Full Lower Layer Message'
+
+
+# Key Components
+# 示例：两个 16 字节的 key component
+COMP1 = '0123456789ABCDEFFEDCBA9876543210'
+COMP2 = '00112233445566778899AABBCCDDEEFF'

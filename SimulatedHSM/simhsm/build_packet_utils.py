@@ -1,5 +1,6 @@
 from binascii import unhexlify, hexlify
-from . import constants
+import constants
+
 
 def build_upper_layer_packet(type_hex: str, data_hex: str) -> str:
     """

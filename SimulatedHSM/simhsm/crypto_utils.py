@@ -1,12 +1,13 @@
 import binascii
 from binascii import unhexlify, hexlify
 from Crypto.Cipher import DES3, AES
-from Crypto.Util.Padding import pad, unpad
+from Crypto.Util.Padding import pad
+from Crypto.Util.Padding import unpad
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 import logging
-from . import constants
+import constants
 
 logger = logging.getLogger(__name__)
 
@@ -139,10 +140,9 @@ def derive_ipek_from_bdk(bdk_hex: str, initial_ksn_hex: str, algo: str) -> str:
     return hexlify(ipek).upper().decode()
 
 
-def key_encryption_from_kek(key_hex: str, kek_hex: str, algo: str, kcv: bool) -> str:
+def key_encryption_from_kek(key_hex: str, kek_hex: str, algo: str, kcv: bool, pkcs7: bool) -> str:
     key = unhexlify(key_hex)
     kek = unhexlify(kek_hex)
-
     algo = algo.upper()
 
     if algo == "3DES" or kcv is True:
@@ -153,7 +153,7 @@ def key_encryption_from_kek(key_hex: str, kek_hex: str, algo: str, kcv: bool) ->
             raise ValueError("KEK must be 16 or 24 bytes.")
 
         if len(key) % 8 != 0:
-            raise ValueError("Key must be a multiple of 8 bytes for 3DES.")
+            raise ValueError("GenerateKey must be a multiple of 8 bytes for 3DES.")
 
         cipher = DES3.new(kek, DES3.MODE_ECB)
 
@@ -168,18 +168,68 @@ def key_encryption_from_kek(key_hex: str, kek_hex: str, algo: str, kcv: bool) ->
             raise ValueError("AES KEK must be 16, 24, or 32 bytes.")
 
         cipher = AES.new(kek, AES.MODE_ECB)
-        # 🔑 PKCS5Padding 实际上等价于 PKCS7Padding，块大小 16
-        padded_key = pad(key, AES.block_size, style="pkcs7")
 
-        if len(padded_key) % 16 != 0:
-            raise ValueError("Key must be a multiple of 16 bytes for AES.")
+        if pkcs7 is True:
+            # ===== 🔑 PKCS5Padding 实际上等价于 PKCS7Padding，块大小 16 =====
+            # only for SUNMI TargetPOS Key injection. If encrypted regular data, it can use Zeropadding
+            padded_key = pad(key, AES.block_size, style="pkcs7")
+
+            if len(padded_key) % 16 != 0:
+                raise ValueError("GenerateKey must be a multiple of 16 bytes for AES.")
+
+            encrypted = cipher.encrypt(padded_key)
+            print(f"encrypted data with PKCS7Padding: {hexlify(encrypted).decode().upper()}")
+
+        else:
+            # ===== Zero Padding 处理 =====
+            block_size = AES.block_size  # 16
+            remainder = len(key) % block_size
+            if remainder != 0:
+                padded_key = key + b"\x00" * (block_size - remainder)
+            else:
+                padded_key = key
 
         encrypted = cipher.encrypt(padded_key)
+        print(f"encrypted data with zero padding: {hexlify(encrypted).decode().upper()}")
 
     else:
         raise ValueError("Unsupported algorithm, choose '3DES' or 'AES'")
 
     return hexlify(encrypted).decode().upper()
+
+def data_decryption_from_kek(cipher_hex: str, kek_hex: str, algo: str, pkcs7: bool) -> str:
+    cipher_bytes = unhexlify(cipher_hex)
+    kek_bytes = unhexlify(kek_hex)
+    algo = algo.upper()
+
+    if algo == "3DES":
+        # KEK 扩展成 24 字节 (K1-K2-K1) 如果是 16 字节
+        if len(kek_bytes) == 16:
+            kek_bytes = kek_bytes + kek_bytes[:8]
+        elif len(kek_bytes) != 24:
+            raise ValueError("KEK must be 16 or 24 bytes for 3DES")
+        cipher = DES3.new(kek_bytes, DES3.MODE_ECB)
+        decrypted = cipher.decrypt(cipher_bytes)
+
+    elif algo == "AES":
+        if len(kek_bytes) not in (16, 24, 32):
+            raise ValueError("KEK must be 16, 24, or 32 bytes for AES")
+        cipher = AES.new(kek_bytes, AES.MODE_ECB)
+        decrypted_padded = cipher.decrypt(cipher_bytes)
+
+        if pkcs7 is True:
+            # ===== 🔑 PKCS5Padding 实际上等价于 PKCS7Padding，块大小 16 =====
+            decrypted = unpad(decrypted_padded, AES.block_size, style='pkcs7')
+            print(f"decrypted data with pkcs7: {hexlify(decrypted).decode().upper()}")
+        else:
+            # ===== Zero Padding 处理 =====
+            decrypted = decrypted_padded.rstrip(b'\x00')
+            print(f"decrypted data with zero padding: {hexlify(decrypted).decode().upper()}")
+
+    else:
+        raise ValueError("Unsupported algorithm")
+
+    return hexlify(decrypted).decode().upper()
 
 
 def calculate_kcv(key_hex: str, algo: str) -> str:
@@ -190,9 +240,13 @@ def calculate_kcv(key_hex: str, algo: str) -> str:
         if len(key) == 16:
             key += key[:8]  # 双长补成三段式 K1-K2-K1
         elif len(key) != 24:
-            raise ValueError("Key must be either 16 or 24 bytes (32 or 48 hex characters)")
+            raise ValueError("GenerateKey must be either 16 or 24 bytes (32 or 48 hex characters)")
 
-        cipher = DES3.new(key, DES3.MODE_ECB)
+        try:
+            cipher = DES3.new(key, DES3.MODE_ECB)
+        except Exception as e:
+            print(e)
+
         zero_block = b'\x00' * 8
 
         encrypted = cipher.encrypt(zero_block)

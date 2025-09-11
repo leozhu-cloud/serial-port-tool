@@ -6,7 +6,9 @@ import time
 
 
 sys.path.append(os.path.dirname(__file__))  # 把 SimulatedHSM 目录加到 sys.path
-from SimulatedHSM.simhsm import constants, build_packet_utils, serial_utils, parser, crypto_utils
+from SimulatedHSM.simhsm import build_packet_utils, serial_utils, parser, crypto_utils
+import constants
+
 
 def run_key_injection(port_name: str, baud_rate: int, key_algo: str, bdk_idx: str, bdk_data: str, ksn: str):
     logger = logging.getLogger(__name__)
@@ -74,22 +76,22 @@ def run_key_injection(port_name: str, baud_rate: int, key_algo: str, bdk_idx: st
     # calculate KCV for IPEK
     ipek_kcv_plaintext = crypto_utils.calculate_kcv(ipek_plaintext, key_algo)
 
-    print(f"SN: {sn}; RSA Pub Key: {rsa_pub_key_hex}; KSN: {ksn}; Plaintext IPEK: {ipek_plaintext}; Plaintext KCV: {ipek_kcv_plaintext}")
+    print(f"SN: {sn}; RSA Pub GenerateKey: {rsa_pub_key_hex}; KSN: {ksn}; Plaintext IPEK: {ipek_plaintext}; Plaintext KCV: {ipek_kcv_plaintext}")
 
     # Encrypt IPEK and KCV
     if key_algo == constants.KEY_3DES:
         key_type = '31'
-        ipek_cipher = crypto_utils.key_encryption_from_kek(ipek_plaintext, constants.KEK_TSYS, key_algo, False)
+        ipek_cipher = crypto_utils.key_encryption_from_kek(ipek_plaintext, constants.KEK_TSYS, key_algo, False, True)
         dukpt_ksn_packet = build_packet_utils.build_upper_layer_packet(constants.TYPE_DUKPT_KSN, ksn)
     elif key_algo == constants.KEY_AES:
         key_type = '32'
-        ipek_cipher = crypto_utils.key_encryption_from_kek(ipek_plaintext, '0' * 32, key_algo, False)
+        ipek_cipher = crypto_utils.key_encryption_from_kek(ipek_plaintext, '0' * 32, key_algo, False, True)
         print(f"ipek_cipher: {ipek_cipher}")
         dukpt_ksn_packet = build_packet_utils.build_upper_layer_packet(constants.TYPE_DUKPT_KSN, ksn)
     else:
         raise ValueError("Unsupported algorithm: choose 3DES / AES")
 
-    ipek_kcv_cipher = crypto_utils.key_encryption_from_kek(ipek_kcv_plaintext, constants.KEK_TSYS, key_algo, True)
+    ipek_kcv_cipher = crypto_utils.key_encryption_from_kek(ipek_kcv_plaintext, constants.KEK_TSYS, key_algo, True, True)
 
     # build DUKPT_IPEK each packet
     dukpt_key_type_packet = build_packet_utils.build_upper_layer_packet(constants.TYPE_KEY_LENGTH, bdk_length_hex)
@@ -122,7 +124,7 @@ def run_key_injection(port_name: str, baud_rate: int, key_algo: str, bdk_idx: st
     # close serial port
     ser.close()
 
-    print("✅ Key Injection successful.\n")
+    print("✅ GenerateKey Injection successful.\n")
 
 
 if __name__ == "__main__":
